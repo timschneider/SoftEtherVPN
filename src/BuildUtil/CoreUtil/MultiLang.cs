@@ -44,10 +44,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -242,7 +257,7 @@ public class MultiLang
 	public readonly Page Page;
 	public readonly HttpRequest Request;
 	public readonly HttpResponse Response;
-	public readonly bool IsUrlModefied;
+	public readonly bool IsUrlModified;
 	public readonly string OriginalUrl;
 	public readonly string PhysicalUrl;
 	public readonly bool IsFilenameModified;
@@ -379,7 +394,7 @@ public class MultiLang
 		this.IsSSL = isSsl;
 		this.Host = host;
 
-		this.IsUrlModefied = Str.StrToBool((string)Request.Headers["SEISAPI_MODIFIED_URL"]);
+		this.IsUrlModified = Str.StrToBool((string)Request.Headers["SEISAPI_MODIFIED_URL"]);
 		this.OriginalUrl = (string)Request.Headers["SEISAPI_ORIGINAL_URL"];
 
 		int i;
@@ -389,7 +404,7 @@ public class MultiLang
 			this.OriginalUrl = this.OriginalUrl.Substring(0, i);
 		}
 
-		if (Str.IsEmptyStr(this.OriginalUrl) || this.IsUrlModefied == false)
+		if (Str.IsEmptyStr(this.OriginalUrl) || this.IsUrlModified == false)
 		{
 			this.OriginalUrl = AspUtil.RemoveDefaultHtml(AspUtil.GetCurrentRequestUrl(Page));
 		}
@@ -948,7 +963,3 @@ public class MultiLanguageFilterStream : Stream
 	}
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // SeLow - SoftEther Lightweight Network Protocol
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -100,10 +115,10 @@
 // Change this number every time functions are added or modified on the driver.
 // As long as this number does not change, installation of SeLow during the update
 // installation of the VPN Server / VPN Client / VPN Bridge is skipped.
-#define	SL_VER						42
+#define	SL_VER						48
 
 // Constants
-#define	SL_MAX_PACKET_SIZE			1560
+#define	SL_MAX_PACKET_SIZE			1600
 #define	SL_MAX_PACKET_SIZE_ANNOUNCE	1514
 #define	SL_MIN_PACKET_SIZE			14
 #define	SL_PACKET_HEADER_SIZE		14
@@ -140,6 +155,7 @@ typedef struct SL_IOCTL_EVENT_NAME
 // Registry key
 #define	SL_REG_KEY_NAME					"SYSTEM\\CurrentControlSet\\services\\SeLow"
 #define	SL_REG_VER_VALUE				"SlVersion"
+#define	SL_REG_VER_VALUE_WIN10			"SlVersion_Win10"
 
 // Adapter data
 #define	SL_ADAPTER_ID_LEN				64
@@ -150,7 +166,8 @@ typedef struct SL_ADAPTER_INFO
 	UCHAR Padding1[2];
 	UINT MtuSize;						// MTU size
 	char FriendlyName[256];				// Display name
-	UCHAR Reserved[256];				// Reserved area
+	UINT SupportsVLanHw;				// Supports VLAN by HW
+	UCHAR Reserved[256 - sizeof(UINT)];	// Reserved area
 } SL_ADAPTER_INFO;
 
 #define	SL_MAX_ADAPTER_INFO_LIST_ENTRY	256
@@ -184,7 +201,3 @@ typedef struct SL_ADAPTER_INFO_LIST
 #define	SL_LEFT_FLAG(buf)			SL_SIZE_OF_PACKET(buf, SL_MAX_PACKET_EXCHANGE)
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -107,30 +122,6 @@
 #include <errno.h>
 #include <Mayaqua/Mayaqua.h>
 
-
-// Send an ICMP Echo
-ICMP_RESULT *IcmpEchoSend(IP *dest_ip, UCHAR ttl, UCHAR *data, UINT size, UINT timeout)
-{
-	// Validate arguments
-	if (dest_ip == NULL || IsIP4(dest_ip) == false || (size != 0 && data == NULL))
-	{
-		return NULL;
-	}
-	if (ttl == 0)
-	{
-		ttl = 127;
-	}
-
-	if (IsIcmpApiSupported())
-	{
-		return IcmpApiEchoSend(dest_ip, ttl, data, size, timeout);
-	}
-	else
-	{
-		return IcmpEchoSendBySocket(dest_ip, ttl, data, size, timeout);
-	}
-}
-
 // Release the memory for the ICMP response
 void IcmpFreeResult(ICMP_RESULT *r)
 {
@@ -159,14 +150,14 @@ ICMP_RESULT *IcmpParseResult(IP *dest_ip, USHORT src_id, USHORT src_seqno, UCHAR
 	if (true)
 	{
 		UINT ip_header_size = GetIpHeaderSize(recv_buffer, i);
-		if (ip_header_size >= sizeof(IPV4_HEADER))
+		if (ip_header_size >= sizeof(IPV4_HEADER) && (ip_header_size <= i))
 		{
 			IPV4_HEADER *ipv4 = (IPV4_HEADER *)recv_buffer;
 			if ((IPV4_GET_VERSION(ipv4) == 4) && (ipv4->Protocol == IP_PROTO_ICMPV4))
 			{
 				UINT ip_total_len = (UINT)Endian16(ipv4->TotalLength);
 
-				if ((ip_total_len >= sizeof(IPV4_HEADER)) && (ip_total_len <= i))
+				if ((ip_total_len >= sizeof(IPV4_HEADER)) && (ip_total_len <= i) && (ip_total_len >= ip_header_size))
 				{
 					UINT icmp_packet_size = ip_total_len - ip_header_size;
 					ICMP_HEADER *icmp = (ICMP_HEADER *)(recv_buffer + ip_header_size);
@@ -251,138 +242,6 @@ ICMP_RESULT *IcmpParseResult(IP *dest_ip, USHORT src_id, USHORT src_seqno, UCHAR
 				}
 			}
 		}
-	}
-
-	return ret;
-}
-
-// Send the ICMP Echo (by a socket)
-ICMP_RESULT *IcmpEchoSendBySocket(IP *dest_ip, UCHAR ttl, UCHAR *data, UINT size, UINT timeout)
-{
-	SOCK *s;
-	ICMP_RESULT *ret = NULL;
-	USHORT id;
-	USHORT seq;
-	UINT64 sent_tick;
-	UINT64 recv_tick;
-	// Validate arguments
-	if (dest_ip == NULL || IsIP4(dest_ip) == false || (size != 0 && data == NULL))
-	{
-		return NULL;
-	}
-	if (ttl == 0)
-	{
-		ttl = 127;
-	}
-
-	s = NewUDP4(MAKE_SPECIAL_PORT(IP_PROTO_ICMPV4), NULL);
-	if (s != NULL)
-	{
-		// Construction of the ICMP packet
-		UCHAR *send_buffer;
-		UINT send_buffer_size = sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO) + size;
-		ICMP_HEADER *send_icmp_header;
-		ICMP_ECHO *send_icmp_echo;
-		UINT i;
-
-		id = Rand16();
-		if (id == 0)
-		{
-			id = 1;
-		}
-
-		seq = Rand16();
-		if (seq == 0)
-		{
-			seq = 1;
-		}
-
-		send_buffer = ZeroMalloc(send_buffer_size);
-
-		send_icmp_header = (ICMP_HEADER *)send_buffer;
-		send_icmp_header->Type = ICMP_TYPE_ECHO_REQUEST;
-
-		send_icmp_echo = (ICMP_ECHO *)(send_buffer + sizeof(ICMP_HEADER));
-		send_icmp_echo->Identifier = Endian16(id);
-		send_icmp_echo->SeqNo = Endian16(seq);
-
-		Copy(send_buffer + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO), data, size);
-
-		send_icmp_header->Checksum = IpChecksum(send_buffer, send_buffer_size);
-
-		// Send an ICMP
-		SetTtl(s, ttl);
-		sent_tick = TickHighres64();
-		i = SendTo(s, dest_ip, MAKE_SPECIAL_PORT(IP_PROTO_ICMPV4), send_buffer, send_buffer_size);
-
-		if (i != 0 && i != INFINITE)
-		{
-			// ICMP response received
-			INTERRUPT_MANAGER *interrupt = NewInterruptManager();
-			UINT64 giveup_time = Tick64() + (UINT64)timeout;
-			UINT recv_buffer_size = (sizeof(IPV4_HEADER) + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO) + size + 64) * 2;
-			UCHAR *recv_buffer = Malloc(recv_buffer_size);
-
-			AddInterrupt(interrupt, giveup_time);
-
-			while (true)
-			{
-				UINT interval = GetNextIntervalForInterrupt(interrupt);
-				IP src_ip;
-				UINT src_port;
-				SOCKSET set;
-
-				InitSockSet(&set);
-				AddSockSet(&set, s);
-
-				Select(&set, interval, NULL, NULL);
-
-				while (true)
-				{
-					Zero(recv_buffer, recv_buffer_size);
-					i = RecvFrom(s, &src_ip, &src_port, recv_buffer, recv_buffer_size);
-					recv_tick = TickHighres64();
-
-					if (i != 0 && i != SOCK_LATER)
-					{
-						ret = IcmpParseResult(dest_ip, id, seq, recv_buffer, i);
-
-						if (ret != NULL)
-						{
-							break;
-						}
-					}
-					else
-					{
-						break;
-					}
-				}
-
-				if (interval == 0)
-				{
-					break;
-				}
-
-				if (ret != NULL)
-				{
-					break;
-				}
-			}
-
-			FreeInterruptManager(interrupt);
-
-			Free(recv_buffer);
-
-			if (ret == NULL)
-			{
-				ret = ZeroMalloc(sizeof(ICMP_RESULT));
-
-				ret->Timeout = true;
-			}
-		}
-
-		Free(send_buffer);
-		ReleaseSock(s);
 	}
 
 	return ret;
@@ -560,7 +419,6 @@ UINT GetIpHeaderSize(UCHAR *src, UINT src_size)
 {
 	UCHAR ip_ver;
 	TCP_HEADER *tcp = NULL;
-	UINT tcp_size = 0;
 	IPV4_HEADER *ip = NULL;
 	IPV6_HEADER *ip6 = NULL;
 	// Validate arguments
@@ -654,6 +512,7 @@ bool AdjustTcpMssL3(UCHAR *src, UINT src_size, UINT mss)
 	if (ip_ver == 4)
 	{
 		UINT ip_header_size;
+		UINT ip_total_length;
 		// IPv4
 		if (src_size < sizeof(IPV4_HEADER))
 		{
@@ -694,8 +553,22 @@ bool AdjustTcpMssL3(UCHAR *src, UINT src_size, UINT mss)
 			return false;
 		}
 
+		ip_total_length = READ_USHORT(&ip->TotalLength);
+
+		if (ip_total_length < ip_header_size)
+		{
+			// Invalid total length
+			return false;
+		}
+
+		if (src_size < ip_total_length)
+		{
+			// No total length
+			return false;
+		}
+
 		src += ip_header_size;
-		src_size -= ip_header_size;
+		src_size = ip_total_length - ip_header_size;
 
 		if (src_size < sizeof(TCP_HEADER))
 		{
@@ -1001,7 +874,6 @@ void VLanInsertTag(void **packet_data, UINT *packet_size, UINT vlan_id, UINT vla
 // Remove the VLAN tag from the packet
 bool VLanRemoveTag(void **packet_data, UINT *packet_size, UINT vlan_id, UINT vlan_tpid)
 {
-	bool has_vlan_tag = false;
 	UCHAR *src_data;
 	UINT src_size;
 	USHORT vlan_tpid_ushort;
@@ -1065,7 +937,7 @@ BUF *BuildICMPv6(IPV6_ADDR *src_ip, IPV6_ADDR *dest_ip, UCHAR hop_limit, UCHAR t
 		return NULL;
 	}
 
-	// Assembe the header
+	// Assemble the header
 	icmp = ZeroMalloc(sizeof(ICMP_HEADER) + size);
 	data_buf = ((UCHAR *)icmp) + sizeof(ICMP_HEADER);
 	Copy(data_buf, data, size);
@@ -1127,7 +999,7 @@ BUF *BuildICMPv6NeighborSoliciation(IPV6_ADDR *src_ip, IPV6_ADDR *target_ip, UCH
 UCHAR IPv6GetNextHeaderFromQueue(QUEUE *q)
 {
 	UINT *p;
-	UCHAR v;
+	UCHAR v = 0;
 	// Validate arguments
 	if (q == NULL)
 	{
@@ -1135,8 +1007,11 @@ UCHAR IPv6GetNextHeaderFromQueue(QUEUE *q)
 	}
 
 	p = (UINT *)GetNext(q);
-	v = (UCHAR)(*p);
-	Free(p);
+	if (p != NULL)
+	{
+		v = (UCHAR)(*p);
+		Free(p);
+	}
 
 	return v;
 }
@@ -1658,6 +1533,10 @@ PKT *ClonePacket(PKT *p, bool copy_data)
 		ret->L7.IkeHeader = MallocFast(sizeof(IKE_HEADER));
 		Copy(ret->L7.IkeHeader, p->L7.IkeHeader, sizeof(IKE_HEADER));
 		break;
+ 
+ 	case L7_DNS:
+ 		StrCpy(ret->DnsQueryHost, sizeof(ret->DnsQueryHost), p->DnsQueryHost);
+ 		break;
 	}
 
 	// Address data
@@ -1813,19 +1692,28 @@ PKT *ParsePacketEx4(UCHAR *buf, UINT size, bool no_l3, UINT vlan_type_id, bool b
 	if (no_http == false)
 	{
 		USHORT port_raw = Endian16(80);
+		USHORT port_raw2 = Endian16(8080);
+		USHORT port_raw3 = Endian16(443);
+		USHORT port_raw4 = Endian16(3128);
 
 		// Analyze if the packet is a part of HTTP
 		if ((p->TypeL3 == L3_IPV4 || p->TypeL3 == L3_IPV6) && p->TypeL4 == L4_TCP)
 		{
 			TCP_HEADER *tcp = p->L4.TCPHeader;
-			if (tcp->DstPort == port_raw)
+			if (tcp != NULL && (tcp->DstPort == port_raw || tcp->DstPort == port_raw2 || tcp->DstPort == port_raw4) &&
+				(!((tcp->Flag & TCP_SYN) || (tcp->Flag & TCP_RST) || (tcp->Flag & TCP_FIN))))
 			{
-				if (tcp != NULL && (!((tcp->Flag & TCP_SYN) || (tcp->Flag & TCP_RST) || (tcp->Flag & TCP_FIN))))
+				if (p->PayloadSize >= 1)
 				{
-					if (p->PayloadSize >= 1)
-					{
-						p->HttpLog = ParseHttpAccessLog(p);
-					}
+					p->HttpLog = ParseHttpAccessLog(p);
+				}
+			}
+			if (tcp != NULL && tcp->DstPort == port_raw3 &&
+				(!((tcp->Flag & TCP_SYN) || (tcp->Flag & TCP_RST) || (tcp->Flag & TCP_FIN))))
+			{
+				if (p->PayloadSize >= 1)
+				{
+					p->HttpLog = ParseHttpsAccessLog(p);
 				}
 			}
 		}
@@ -1914,7 +1802,7 @@ void CorrectChecksum(PKT *p)
 						{
 							udp->Checksum = 0;
 
-							if ((IPV4_GET_FLAGS(v4) & 0x01) == 0)
+							if ((IPV4_GET_FLAGS(v4) & 0x01) == 0 && (p->IPv4PayloadSize >= udp_len))
 							{
 								// Calculate the checksum correctly based on the data in case of a non-fragmented packet
 								udp->Checksum = CalcChecksumForIPv4(v4->SrcIP, v4->DstIP, IP_PROTO_UDP, udp, udp_len, 0);
@@ -1950,7 +1838,6 @@ void CorrectChecksum(PKT *p)
 
 						if (tcp != NULL)
 						{
-							UINT tcp_header_size = TCP_GET_HEADER_SIZE(tcp) * 4;
 							USHORT tcp_offloading_checksum1 = CalcChecksumForIPv6(&v6->SrcAddress, &v6->DestAddress, IP_PROTO_TCP, NULL, 0, v6info->PayloadSize);
 							USHORT tcp_offloading_checksum2 = ~tcp_offloading_checksum1;
 
@@ -1980,7 +1867,7 @@ void CorrectChecksum(PKT *p)
 						{
 							udp->Checksum = 0;
 
-							if (v6info->FragmentHeader == NULL || ((IPV6_GET_FLAGS(v6info->FragmentHeader) & IPV6_FRAGMENT_HEADER_FLAG_MORE_FRAGMENTS) == 0))
+							if ((v6info->FragmentHeader == NULL || ((IPV6_GET_FLAGS(v6info->FragmentHeader) & IPV6_FRAGMENT_HEADER_FLAG_MORE_FRAGMENTS) == 0)) && (v6info->PayloadSize >= udp_len))
 							{
 								// If the packet is not fragmented, recalculate the checksum
 								udp->Checksum = CalcChecksumForIPv6(&v6->SrcAddress, &v6->DestAddress, IP_PROTO_UDP, udp, udp_len, 0);
@@ -1997,6 +1884,33 @@ void CorrectChecksum(PKT *p)
 	}
 }
 
+
+// Parse the HTTPS access log
+HTTPLOG *ParseHttpsAccessLog(PKT *pkt)
+{
+	HTTPLOG h;
+	char sni[MAX_PATH];
+	// Validate arguments
+	if (pkt == NULL)
+	{
+		return NULL;
+	}
+
+	if (GetSniNameFromSslPacket(pkt->Payload, pkt->PayloadSize, sni, sizeof(sni)) == false)
+	{
+		return NULL;
+	}
+
+	Zero(&h, sizeof(h));
+
+	StrCpy(h.Method, sizeof(h.Method), "SSL_Connect");
+	StrCpy(h.Hostname, sizeof(h.Hostname), sni);
+	h.Port = Endian16(pkt->L4.TCPHeader->DstPort);
+	StrCpy(h.Path, sizeof(h.Path), "/");
+	h.IsSsl = true;
+
+	return Clone(&h, sizeof(h));
+}
 
 // Parse the HTTP access log
 HTTPLOG *ParseHttpAccessLog(PKT *pkt)
@@ -2121,10 +2035,6 @@ HTTPLOG *ParseHttpAccessLog(PKT *pkt)
 
 
 // Layer-2 parsing
-bool ParsePacketL2(PKT *p, UCHAR *buf, UINT size)
-{
-	return ParsePacketL2Ex(p, buf, size, false);
-}
 bool ParsePacketL2Ex(PKT *p, UCHAR *buf, UINT size, bool no_l3)
 {
 	UINT i;
@@ -2167,7 +2077,7 @@ bool ParsePacketL2Ex(PKT *p, UCHAR *buf, UINT size, bool no_l3)
 			b2 = false;
 		}
 	}
-	if (b1 || b2 || (Cmp(p->MacHeader->SrcAddress, p->MacHeader->DestAddress, 6) == 0))
+	if (b1 || b2 || (memcmp(p->MacHeader->SrcAddress, p->MacHeader->DestAddress, 6) == 0))
 	{
 		p->InvalidSourcePacket = true;
 	}
@@ -2798,6 +2708,7 @@ PKT *ParsePacketIPv4WithDummyMacHeader(UCHAR *buf, UINT size)
 {
 	UCHAR *tmp;
 	UINT tmp_size;
+	PKT *ret;
 	// Validate arguments
 	if (buf == NULL)
 	{
@@ -2810,7 +2721,14 @@ PKT *ParsePacketIPv4WithDummyMacHeader(UCHAR *buf, UINT size)
 	WRITE_USHORT(tmp + 12, MAC_PROTO_IPV4);
 	Copy(tmp + 14, buf, size);
 
-	return ParsePacket(tmp, tmp_size);
+	ret = ParsePacket(tmp, tmp_size);
+
+	if (ret == NULL)
+	{
+		Free(tmp);
+	}
+
+	return ret;
 }
 
 // IPv4 parsing
@@ -2858,6 +2776,7 @@ bool ParsePacketIPv4(PKT *p, UCHAR *buf, UINT size)
 	{
 		// Quit analysing since this is fragmented
 		p->TypeL4 = L4_FRAGMENT;
+
 		return true;
 	}
 
@@ -2944,6 +2863,148 @@ bool ParseTCP(PKT *p, UCHAR *buf, UINT size)
 	return true;
 }
 
+// Get the next byte
+UCHAR GetNextByte(BUF *b)
+{
+	UCHAR c = 0;
+	// Validate arguments
+	if (b == NULL)
+	{
+		return 0;
+	}
+
+	if (ReadBuf(b, &c, 1) != 1)
+	{
+		return 0;
+	}
+
+	return c;
+}
+
+// Interpret the DNS query
+bool ParseDnsQuery(char *name, UINT name_size, void *data, UINT data_size)
+{
+	BUF *b;
+	char tmp[257];
+	bool ok = true;
+	USHORT val;
+	// Validate arguments
+	if (name == NULL || data == NULL || data_size == 0)
+	{
+		return false;
+	}
+	StrCpy(name, name_size, "");
+
+	b = NewBuf();
+	WriteBuf(b, data, data_size);
+	SeekBuf(b, 0, 0);
+
+	while (true)
+	{
+		UINT next_len = (UINT)GetNextByte(b);
+		if (next_len > 0)
+		{
+			// Read only the specified length
+			Zero(tmp, sizeof(tmp));
+			if (ReadBuf(b, tmp, next_len) != next_len)
+			{
+				ok = false;
+				break;
+			}
+			// Append
+			if (StrLen(name) != 0)
+			{
+				StrCat(name, name_size, ".");
+			}
+			StrCat(name, name_size, tmp);
+		}
+		else
+		{
+			// Read all
+			break;
+		}
+	}
+
+	if (ReadBuf(b, &val, sizeof(val)) != sizeof(val))
+	{
+		ok = false;
+	}
+	else
+	{
+		if (Endian16(val) != 0x01 && Endian16(val) != 0x0c)
+		{
+			ok = false;
+		}
+	}
+
+	if (ReadBuf(b, &val, sizeof(val)) != sizeof(val))
+	{
+		ok = false;
+	}
+	else
+	{
+		if (Endian16(val) != 0x01)
+		{
+			ok = false;
+		}
+	}
+
+	FreeBuf(b);
+
+	if (ok == false || StrLen(name) == 0)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
+// DNS parsing
+void ParseDNS(PKT *p, UCHAR *buf, UINT size)
+{
+	UCHAR *query_data;
+	UINT query_data_size;
+	DNSV4_HEADER *dns;
+	char hostname[MAX_SIZE];
+	if (p == NULL|| buf == NULL)
+	{
+		return;
+	}
+
+	if (size < sizeof(DNSV4_HEADER))
+	{
+		return;
+	}
+
+	dns = (DNSV4_HEADER *)buf;
+
+	if ((dns->Flag1 & 78) != 0 || (dns->Flag1 & 0x80) != 0)
+	{
+		// Illegal opcode
+		return;
+	}
+	if (Endian16(dns->NumQuery) != 1)
+	{
+		// Number of queries is invalid
+		return;
+	}
+
+	query_data = ((UCHAR *)dns) + sizeof(DNSV4_HEADER);
+	query_data_size = size - sizeof(DNSV4_HEADER);
+
+	// Interpret the query
+	if (ParseDnsQuery(hostname, sizeof(hostname), query_data, query_data_size) == false)
+	{
+		// Interpretation fails
+		return;
+	}
+
+	StrCpy(p->DnsQueryHost, sizeof(p->DnsQueryHost), hostname);
+	p->TypeL7 = L7_DNS;
+}
+
 // UDP parsing
 bool ParseUDP(PKT *p, UCHAR *buf, UINT size)
 {
@@ -2986,6 +3047,13 @@ bool ParseUDP(PKT *p, UCHAR *buf, UINT size)
 			return true;
 		}
 	}
+  
+ 	if (dst_port == 53)
+	{
+ 		ParseDNS(p, buf, size);
+ 		return true;
+ 	}
+ 
 
 	if (src_port == 500 || dst_port == 500 || src_port == 4500 || dst_port == 4500)
 	{
@@ -3288,11 +3356,44 @@ BUF *BuildDhcpOptionsBuf(LIST *o)
 	for (i = 0;i < LIST_NUM(o);i++)
 	{
 		DHCP_OPTION *d = LIST_DATA(o, i);
+		UINT current_size = d->Size;
+		UINT current_pos = 0;
+
 		id = (UCHAR)d->Id;
-		sz = (UCHAR)d->Size;
+		if (d->Size <= 255)
+		{
+			sz = (UCHAR)d->Size;
+		}
+		else
+		{
+			sz = 0xFF;
+		}
 		WriteBuf(b, &id, 1);
 		WriteBuf(b, &sz, 1);
-		WriteBuf(b, d->Data, d->Size);
+		WriteBuf(b, d->Data, sz);
+
+		current_size -= sz;
+		current_pos += sz;
+
+		while (current_size != 0)
+		{
+			id = DHCP_ID_PRIVATE;
+			if (current_size <= 255)
+			{
+				sz = (UCHAR)current_size;
+			}
+			else
+			{
+				sz = 0xFF;
+			}
+			WriteBuf(b, &id, 1);
+			WriteBuf(b, &sz, 1);
+			WriteBuf(b, ((UCHAR *)d->Data) + current_pos, sz);
+
+			current_size -= sz;
+			current_pos += sz;
+		}
+
 	}
 
 	id = 0xff;
@@ -3739,27 +3840,24 @@ BUF *DhcpBuildClasslessRouteData(DHCP_CLASSLESS_ROUTE_TABLE *t)
 
 		if (r->Exists && r->SubnetMaskLen <= 32)
 		{
-			if (b->Size <= (255 - 9))
-			{
-				UCHAR c;
-				UINT data_len;
-				UINT ip32;
-				UCHAR tmp[4];
+			UCHAR c;
+			UINT data_len;
+			UINT ip32;
+			UCHAR tmp[4];
 
-				// Width of subnet mask
-				c = (UCHAR)r->SubnetMaskLen;
-				WriteBuf(b, &c, 1);
+			// Width of subnet mask
+			c = (UCHAR)r->SubnetMaskLen;
+			WriteBuf(b, &c, 1);
 
-				// Number of significant octets
-				data_len = (r->SubnetMaskLen + 7) / 8;
-				Zero(tmp, sizeof(tmp));
-				Copy(tmp, &r->Network, data_len);
-				WriteBuf(b, tmp, data_len);
+			// Number of significant octets
+			data_len = (r->SubnetMaskLen + 7) / 8;
+			Zero(tmp, sizeof(tmp));
+			Copy(tmp, &r->Network, data_len);
+			WriteBuf(b, tmp, data_len);
 
-				// Gateway
-				ip32 = IPToUINT(&r->Gateway);
-				WriteBuf(b, &ip32, sizeof(UINT));
-			}
+			// Gateway
+			ip32 = IPToUINT(&r->Gateway);
+			WriteBuf(b, &ip32, sizeof(UINT));
 		}
 	}
 
@@ -3804,11 +3902,6 @@ void DhcpParseClasslessRouteData(DHCP_CLASSLESS_ROUTE_TABLE *t, void *data, UINT
 		}
 
 		data_len = (subnet_mask_len + 7) / 8;
-		if (data_len > 4)
-		{
-			// Invalid data
-			break;
-		}
 
 		Zero(tmp, sizeof(tmp));
 		if (ReadBuf(b, tmp, data_len) != data_len)
@@ -3949,6 +4042,7 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 {
 	BUF *b;
 	LIST *o;
+	DHCP_OPTION *last_opt;
 	// Validate arguments
 	if (data == NULL)
 	{
@@ -3960,6 +4054,8 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 	SeekBuf(b, 0, 0);
 
 	o = NewListFast(NULL);
+
+	last_opt = NULL;
 
 	while (true)
 	{
@@ -3979,12 +4075,27 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 			break;
 		}
 
-		opt = ZeroMalloc(sizeof(DHCP_OPTION));
-		opt->Id = (UINT)c;
-		opt->Size = (UINT)sz;
-		opt->Data = ZeroMalloc((UINT)sz);
-		ReadBuf(b, opt->Data, sz);
-		Add(o, opt);
+		if (c == DHCP_ID_PRIVATE && last_opt != NULL)
+		{
+			UINT new_size = last_opt->Size + (UINT)sz;
+			UCHAR *new_buf = ZeroMalloc(new_size);
+			Copy(new_buf, last_opt->Data, last_opt->Size);
+			ReadBuf(b, new_buf + last_opt->Size, sz);
+			Free(last_opt->Data);
+			last_opt->Data = new_buf;
+			last_opt->Size = new_size;
+		}
+		else
+		{
+			opt = ZeroMalloc(sizeof(DHCP_OPTION));
+			opt->Id = (UINT)c;
+			opt->Size = (UINT)sz;
+			opt->Data = ZeroMalloc((UINT)sz);
+			ReadBuf(b, opt->Data, sz);
+			Add(o, opt);
+
+			last_opt = opt;
+		}
 	}
 
 	FreeBuf(b);
@@ -4211,7 +4322,3 @@ LABEL_CLEANUP:
 		return NULL;
 	}
 }
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

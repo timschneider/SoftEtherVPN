@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Kernel Device Driver
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -253,7 +268,7 @@ NDIS_STATUS NeoNdisInit(NDIS_STATUS *OpenErrorStatus,
 	}
 
 	// Read the information from the registry
-	if (NeoLoadRegistory() == FALSE)
+	if (NeoLoadRegistry() == FALSE)
 	{
 		// Failure
 		ctx->Initing = FALSE;
@@ -427,25 +442,36 @@ NTSTATUS NeoNdisDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 				if (stack->Parameters.Read.Length == NEO_EXCHANGE_BUFFER_SIZE)
 				{
 					// Address check
-					MDL *mdl = IoAllocateMdl(buf, NEO_EXCHANGE_BUFFER_SIZE, false, false, NULL);
-
-					if (mdl != NULL)
+					bool check_ok = true;
+					__try
 					{
-						MmProbeAndLockPages(mdl, KernelMode, IoWriteAccess);
+						ProbeForWrite(buf, NEO_EXCHANGE_BUFFER_SIZE, 1);
+					}
+					__except (EXCEPTION_EXECUTE_HANDLER)
+					{
+						check_ok = false;
 					}
 
-					if (NeoIsKernelAddress(buf) == FALSE)
+					if (check_ok)
 					{
+						MDL *mdl = IoAllocateMdl(buf, NEO_EXCHANGE_BUFFER_SIZE, false, false, NULL);
+
+						if (mdl != NULL)
+						{
+							MmProbeAndLockPages(mdl, KernelMode, IoWriteAccess);
+						}
+
+
 						// Read
 						NeoRead(buf);
 						Irp->IoStatus.Information = NEO_EXCHANGE_BUFFER_SIZE;
 						ok = true;
-					}
 
-					if (mdl != NULL)
-					{
-						MmUnlockPages(mdl);
-						IoFreeMdl(mdl);
+						if (mdl != NULL)
+						{
+							MmUnlockPages(mdl);
+							IoFreeMdl(mdl);
+						}
 					}
 				}
 			}
@@ -470,25 +496,37 @@ NTSTATUS NeoNdisDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 				if (stack->Parameters.Write.Length == NEO_EXCHANGE_BUFFER_SIZE)
 				{
 					// Address check
-					MDL *mdl = IoAllocateMdl(buf, NEO_EXCHANGE_BUFFER_SIZE, false, false, NULL);
-
-					if (mdl != NULL)
+					bool check_ok = true;
+					__try
 					{
-						MmProbeAndLockPages(mdl, KernelMode, IoReadAccess);
+						ProbeForRead(buf, NEO_EXCHANGE_BUFFER_SIZE, 1);
+					}
+					__except (EXCEPTION_EXECUTE_HANDLER)
+					{
+						check_ok = false;
 					}
 
-					if (NeoIsKernelAddress(buf) == FALSE)
+					if (check_ok)
 					{
+						MDL *mdl = IoAllocateMdl(buf, NEO_EXCHANGE_BUFFER_SIZE, false, false, NULL);
+
+						if (mdl != NULL)
+						{
+							MmProbeAndLockPages(mdl, KernelMode, IoReadAccess);
+						}
+
+						ProbeForRead(buf, NEO_EXCHANGE_BUFFER_SIZE, 1);
+
 						// Write
 						NeoWrite(buf);
 						Irp->IoStatus.Information = stack->Parameters.Write.Length;
 						ok = true;
-					}
 
-					if (mdl != NULL)
-					{
-						MmUnlockPages(mdl);
-						IoFreeMdl(mdl);
+						if (mdl != NULL)
+						{
+							MmUnlockPages(mdl);
+							IoFreeMdl(mdl);
+						}
 					}
 				}
 			}
@@ -644,13 +682,13 @@ void NeoFreeControlDevice()
 		ctx->Event = NULL;
 		ctx->Opened = FALSE;
 	}
-	// Delet the device
+	// Delete the device
 	NdisMDeregisterDevice(ctx->NdisControl);
 }
 
 
 // Read the information from the registry
-BOOL NeoLoadRegistory()
+BOOL NeoLoadRegistry()
 {
 	void *buf;
 	NDIS_STATUS ret;
@@ -1372,20 +1410,6 @@ PACKET_BUFFER *NeoNewPacketBuffer()
 	return p;
 }
 
-// Check whether the specified address is kernel memory
-BOOL NeoIsKernelAddress(void *addr)
-{
-#if	0
-	if ((ULONG)addr >= (ULONG)0x80000000)
-	{
-		// Kernel memory
-		return TRUE;
-	}
-#endif	// CPU_64
-	// User memory
-	return FALSE;
-}
-
 // Reset the event
 void NeoReset(NEO_EVENT *event)
 {
@@ -1690,7 +1714,7 @@ void *NeoMalloc(UINT size)
 	}
 
 	// Allocate the non-paged memory
-	r = NdisAllocateMemoryWithTag(&p, size, 0);
+	r = NdisAllocateMemoryWithTag(&p, size, 'SETH');
 
 	if (NG(r))
 	{
@@ -1713,7 +1737,3 @@ void NeoFree(void *p)
 }
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -325,7 +340,7 @@ void RouteTrackingMain(SESSION *s)
 		UINT i;
 		bool route_to_server_erased = true;
 		bool is_vlan_want_to_be_default_gateway = false;
-		UINT vlan_default_gatewat_metric = 0;
+		UINT vlan_default_gateway_metric = 0;
 		UINT other_if_default_gateway_metric_min = INFINITE;
 
 		// Get whether the routing table have been changed
@@ -368,10 +383,10 @@ void RouteTrackingMain(SESSION *s)
 				{
 					// The virtual LAN card think that he want to be a default gateway
 					is_vlan_want_to_be_default_gateway = true;
-					vlan_default_gatewat_metric = e->Metric;
+					vlan_default_gateway_metric = e->Metric;
 
-					if (vlan_default_gatewat_metric >= 2 &&
-						t->OldDefaultGatewayMetric == (vlan_default_gatewat_metric - 1))
+					if (vlan_default_gateway_metric >= 2 &&
+						t->OldDefaultGatewayMetric == (vlan_default_gateway_metric - 1))
 					{
 						// Restore because the PPP server rewrites
 						// the routing table selfishly
@@ -393,7 +408,7 @@ void RouteTrackingMain(SESSION *s)
 					t->DefaultGatewayByVLan = ZeroMalloc(sizeof(ROUTE_ENTRY));
 					Copy(t->DefaultGatewayByVLan, e, sizeof(ROUTE_ENTRY));
 
-					t->OldDefaultGatewayMetric = vlan_default_gatewat_metric;
+					t->OldDefaultGatewayMetric = vlan_default_gateway_metric;
 				}
 				else
 				{
@@ -494,10 +509,10 @@ void RouteTrackingMain(SESSION *s)
 		// there is no LAN card with smaller metric of 0.0.0.0/0 than
 		// the virtual LAN card, delete other default gateway entries
 		// to elect the virtual LAN card as the default gateway
-//		Debug("is_vlan_want_to_be_default_gateway = %u, rs = %u, route_to_server_erased = %u, other_if_default_gateway_metric_min = %u, vlan_default_gatewat_metric = %u\n",
-//			is_vlan_want_to_be_default_gateway, rs, route_to_server_erased, other_if_default_gateway_metric_min, vlan_default_gatewat_metric);
+//		Debug("is_vlan_want_to_be_default_gateway = %u, rs = %u, route_to_server_erased = %u, other_if_default_gateway_metric_min = %u, vlan_default_gateway_metric = %u\n",
+//			is_vlan_want_to_be_default_gateway, rs, route_to_server_erased, other_if_default_gateway_metric_min, vlan_default_gateway_metric);
 		if (is_vlan_want_to_be_default_gateway && (rs != NULL && route_to_server_erased == false) &&
-			other_if_default_gateway_metric_min >= vlan_default_gatewat_metric)
+			other_if_default_gateway_metric_min >= vlan_default_gateway_metric)
 		{
 			// Scan the routing table again
 			for (i = 0;i < table->NumEntry;i++)
@@ -1120,19 +1135,24 @@ void VLanPaFree(SESSION *s)
 	{
 		char tmp[MAX_SIZE];
 		MS_ADAPTER *a;
+		UINT64 now = Tick64();
+		UINT64 suspend_tick = MsGetSuspendModeBeginTick();
 
-		Format(tmp, sizeof(tmp), VLAN_ADAPTER_NAME_TAG, v->InstanceName);
-		a = MsGetAdapter(tmp);
-
-		if (a != NULL)
+		if (suspend_tick == 0 || (suspend_tick + (UINT64)(30 * 1000)) < now)
 		{
-			if (a->UseDhcp)
-			{
-				bool ret = Win32ReleaseAddressByGuidEx(a->Guid, 50);
-				Debug("*** Win32ReleaseAddressByGuid = %u\n", ret);
-			}
+			Format(tmp, sizeof(tmp), VLAN_ADAPTER_NAME_TAG, v->InstanceName);
+			a = MsGetAdapter(tmp);
 
-			MsFreeAdapter(a);
+			if (a != NULL)
+			{
+				if (a->UseDhcp)
+				{
+					bool ret = Win32ReleaseAddressByGuidEx(a->Guid, 50);
+					Debug("*** Win32ReleaseAddressByGuid = %u\n", ret);
+				}
+
+				MsFreeAdapter(a);
+			}
 		}
 	}
 
@@ -1253,6 +1273,8 @@ PACKET_ADAPTER *VLanGetPacketAdapter()
 	{
 		return NULL;
 	}
+
+	pa->Id = PACKET_ADAPTER_ID_VLAN_WIN32;
 
 	return pa;
 }
@@ -1596,7 +1618,3 @@ CLEANUP:
 
 #endif	//VLAN_C
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -102,11 +117,16 @@ static SERVER *server = NULL;
 static LOCK *server_lock = NULL;
 char *SERVER_CONFIG_FILE_NAME = "@vpn_server.config";
 char *SERVER_CONFIG_FILE_NAME_IN_CLIENT = "@vpn_gate_svc.config";
+char *SERVER_CONFIG_FILE_NAME_IN_CLIENT_RELAY = "@vpn_gate_relay.config";
 char *BRIDGE_CONFIG_FILE_NAME = "@vpn_bridge.config";
+char *SERVER_CONFIG_TEMPLATE_NAME = "@vpn_server_template.config";
+char *BRIDGE_CONFIG_TEMPLATE_NAME = "@vpn_server_template.config";
 
 static bool server_reset_setting = false;
 
 static volatile UINT global_server_flags[NUM_GLOBAL_SERVER_FLAGS] = {0};
+
+UINT vpn_global_parameters[NUM_GLOBAL_PARAMS] = {0};
 
 // Set the OpenVPN and SSTP setting
 void SiSetOpenVPNAndSSTPConfig(SERVER *s, OPENVPN_SSTP_CONFIG *c)
@@ -139,11 +159,11 @@ void SiSetOpenVPNAndSSTPConfig(SERVER *s, OPENVPN_SSTP_CONFIG *c)
 		{
 			if (s->DisableOpenVPNServer)
 			{
-				OvsApplyUdpPortList(s->OpenVpnServerUdp, "");
+				OvsApplyUdpPortList(s->OpenVpnServerUdp, "", NULL);
 			}
 			else
 			{
-				OvsApplyUdpPortList(s->OpenVpnServerUdp, s->OpenVpnServerUdpPorts);
+				OvsApplyUdpPortList(s->OpenVpnServerUdp, s->OpenVpnServerUdpPorts, &s->ListenIP);
 			}
 		}
 	}
@@ -184,38 +204,6 @@ bool SiTooManyUserObjectsInServer(SERVER *s, bool oneMore)
 	return false;
 }
 
-// Get the number of user objects that are registered in the VPN Server
-UINT SiGetServerNumUserObjects(SERVER *s)
-{
-	CEDAR *c;
-	UINT ret = 0;
-	// Validate arguments
-	if (s == NULL)
-	{
-		return 0;
-	}
-
-	c = s->Cedar;
-
-	LockList(c->HubList);
-	{
-		UINT i;
-		for (i = 0;i < LIST_NUM(c->HubList);i++)
-		{
-			HUB *h = LIST_DATA(c->HubList, i);
-
-			if (h->HubDb != NULL)
-			{
-				ret += LIST_NUM(h->HubDb->UserList);
-			}
-		}
-	}
-	UnlockList(c->HubList);
-
-	return ret;
-}
-
-
 typedef struct SI_DEBUG_PROC_LIST
 {
 	UINT Id;
@@ -240,6 +228,8 @@ UINT SiDebug(SERVER *s, RPC_TEST *ret, UINT i, char *str)
 		{9, "Set IPsecMessageDisplayed Flag", "", SiDebugProcSetIPsecMessageDisplayedValue},
 		{10, "Get VgsMessageDisplayed Flag", "", SiDebugProcGetVgsMessageDisplayedValue},
 		{11, "Set VgsMessageDisplayed Flag", "", SiDebugProcSetVgsMessageDisplayedValue},
+		{12, "Get the current TCP send queue length", "", SiDebugProcGetCurrentTcpSendQueueLength},
+		{13, "Get the current GetIP thread count", "", SiDebugProcGetCurrentGetIPThreadCount},
 	};
 	UINT num_proc_list = sizeof(proc_list) / sizeof(proc_list[0]);
 	UINT j;
@@ -437,6 +427,46 @@ UINT SiDebugProcGetVgsMessageDisplayedValue(SERVER *s, char *in_str, char *ret_s
 
 	return ERR_NO_ERROR;
 }
+UINT SiDebugProcGetCurrentTcpSendQueueLength(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size)
+{
+	char tmp1[64], tmp2[64], tmp3[64];
+	// Validate arguments
+	if (s == NULL || in_str == NULL || ret_str == NULL)
+	{
+		return ERR_INVALID_PARAMETER;
+	}
+
+	ToStr3(tmp1, 0, CedarGetCurrentTcpQueueSize(s->Cedar));
+	ToStr3(tmp2, 0, CedarGetQueueBudgetConsuming(s->Cedar));
+	ToStr3(tmp3, 0, CedarGetFifoBudgetConsuming(s->Cedar));
+
+	Format(ret_str, 0, 
+		"CurrentTcpQueueSize  = %s\n"
+		"QueueBudgetConsuming = %s\n"
+		"FifoBudgetConsuming  = %s\n",
+		tmp1, tmp2, tmp3);
+
+	return ERR_NO_ERROR;
+}
+UINT SiDebugProcGetCurrentGetIPThreadCount(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size)
+{
+	char tmp1[64], tmp2[64];
+	// Validate arguments
+	if (s == NULL || in_str == NULL || ret_str == NULL)
+	{
+		return ERR_INVALID_PARAMETER;
+	}
+
+	ToStr3(tmp1, 0, GetCurrentGetIpThreadNum());
+	ToStr3(tmp2, 0, GetGetIpThreadMaxNum());
+
+	Format(ret_str, 0, 
+		"Current threads = %s\n"
+		"Quota           = %s\n",
+		tmp1, tmp2);
+
+	return ERR_NO_ERROR;
+}
 UINT SiDebugProcSetVgsMessageDisplayedValue(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size)
 {
 	// Validate arguments
@@ -475,6 +505,7 @@ void SiCheckDeadLockMain(SERVER *s, UINT timeout)
 	}
 
 	//Debug("SiCheckDeadLockMain Start.\n");
+
 
 	cedar = s->Cedar;
 
@@ -526,6 +557,13 @@ void SiCheckDeadLockMain(SERVER *s, UINT timeout)
 			}
 			UnlockList(cedar->ListenerList);
 
+			for (i = 0;i < LIST_NUM(o);i++)
+			{
+				LISTENER *r = LIST_DATA(o, i);
+
+
+				ReleaseListener(r);
+			}
 
 			ReleaseList(o);
 		}
@@ -853,7 +891,11 @@ void SiWriteSysLog(SERVER *s, char *typestr, char *hubname, wchar_t *message)
 
 	// Date and time
 	LocalTime(&st);
-	GetDateTimeStrMilli(datetime, sizeof(datetime), &st);
+	if(s->StrictSyslogDatetimeFormat){
+		GetDateTimeStrRFC3339(datetime, sizeof(datetime), &st, GetCurrentTimezone());
+	}else{
+		GetDateTimeStrMilli(datetime, sizeof(datetime), &st);
+	}
 
 	if (IsEmptyStr(hubname) == false)
 	{
@@ -865,6 +907,8 @@ void SiWriteSysLog(SERVER *s, char *typestr, char *hubname, wchar_t *message)
 		UniFormat(tmp, sizeof(tmp), L"[%S/VPN] (%S) <%S>: %s",
 			machinename, datetime, typestr, message);
 	}
+
+	Debug("Syslog send: %S\n",tmp);
 
 	SendSysLog(s->Syslog, tmp);
 }
@@ -963,24 +1007,6 @@ void GetServerProductNameInternal(SERVER *s, char *name, UINT size)
 		StrCpy(name, size, CEDAR_SERVER_STR);
 	}
 #endif	// BETA_NUMBER
-}
-
-// Adjoin the enumerations of log files
-void AdjoinEnumLogFile(LIST *o, LIST *src)
-{
-	UINT i;
-	// Validate arguments
-	if (o == NULL || src == NULL)
-	{
-		return;
-	}
-
-	for (i = 0;i < LIST_NUM(src);i++)
-	{
-		LOG_FILE *f = LIST_DATA(src, i);
-
-		Insert(o, Clone(f, sizeof(LOG_FILE)));
-	}
 }
 
 // Check whether the log file with the specified name is contained in the enumerated list
@@ -1283,7 +1309,7 @@ void GetServerCaps(SERVER *s, CAPSLIST *t)
 			GetServerCapsMain(s, s->CapsListCache);
 		}
 
-		Copy(t, s->CapsListCache, sizeof(s->CapsListCache));
+		Copy(t, s->CapsListCache, sizeof(CAPSLIST));
 	}
 	Unlock(s->CapsCacheLock);
 }
@@ -1332,7 +1358,7 @@ UINT GetGlobalServerFlag(UINT index)
 	return global_server_flags[index];
 }
 
-// Main of the aquisition of Caps of the server
+// Main of the acquisition of Caps of the server
 void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 {
 	bool is_restricted = false;
@@ -1500,7 +1526,7 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 	// Maximum NAT table size / Virtual HUB
 	AddCapsInt(t, "i_max_secnat_tables", NAT_MAX_SESSIONS);
 
-	// Cascade connction
+	// Cascade connection
 	if (s->ServerType == SERVER_TYPE_STANDALONE)
 	{
 		AddCapsBool(t, "b_support_cascade", true);
@@ -1558,11 +1584,12 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 
 	if (IsBridgeSupported())
 	{
-		// Tun / tap device is available (only Linux)
-		AddCapsBool(t, "b_tap_supported", GetOsInfo()->OsType == OSTYPE_LINUX ? true : false);
+		// TUN / TAP device availability (Linux and BSD)
+		const UINT OsType = GetOsInfo()->OsType;
+		AddCapsBool(t, "b_tap_supported", OsType == OSTYPE_LINUX || OsType == OSTYPE_BSD);
 	}
 
-	// Cascade connction
+	// Cascade connection
 	if (s->ServerType == SERVER_TYPE_STANDALONE)
 	{
 		AddCapsBool(t, "b_support_cascade", true);
@@ -1712,8 +1739,8 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 	// UDP acceleration feature
 	AddCapsBool(t, "b_support_udp_acceleration", true);
 
-	// Intel AES Acceleration function
-	AddCapsBool(t, "b_support_intel_aes", IsIntelAesNiSupported());
+	// AES acceleration function
+	AddCapsBool(t, "b_support_aes_ni", IsAesNiSupported());
 
 #ifdef	OS_WIN32
 	// SeLow driver
@@ -2027,6 +2054,12 @@ UINT SiCalcPoint(SERVER *s, UINT num, UINT weight)
 
 	server_max_sessions = GetServerCapsInt(s, "i_max_sessions");
 
+	if (server_max_sessions == 0)
+	{
+		// Avoid divide by zero
+		server_max_sessions = 1;
+	}
+
 	return (UINT)(((double)server_max_sessions -
 		MIN((double)num * 100.0 / (double)weight, (double)server_max_sessions))
 		* (double)FARM_BASE_POINT / (double)server_max_sessions);
@@ -2082,7 +2115,7 @@ void SiGenerateDefaultCertEx(X **server_x, K **server_k, char *common_name)
 
 	name = NewName(cn, cn, cn,
 		L"US", NULL, NULL);
-	x = NewRootX(public_key, private_key, name, MAX(GetDaysUntil2038(), SERVER_DEFAULT_CERT_DAYS), NULL);
+	x = NewRootX(public_key, private_key, name, GetDaysUntil2038Ex(), NULL);
 
 	*server_x = x;
 	*server_k = private_key;
@@ -2372,34 +2405,6 @@ void SiUnlockListenerList(SERVER *s)
 	UnlockList(s->ServerListenerList);
 }
 
-// Initialize the Bridge
-void SiInitBridge(SERVER *s)
-{
-	HUB *h;
-	HUB_OPTION o;
-	HUB_LOG g;
-	// Validate arguments
-	if (s == NULL)
-	{
-		return;
-	}
-
-	Zero(&o, sizeof(o));
-	o.MaxSession = 0;
-
-	h = NewHub(s->Cedar, SERVER_DEFAULT_BRIDGE_NAME, &o);
-	AddHub(s->Cedar, h);
-
-	h->Offline = true;
-	SetHubOnline(h);
-
-	// Log settings
-	SiSetDefaultLogSetting(&g);
-	SetHubLogSetting(h, &g);
-
-	ReleaseHub(h);
-}
-
 // Set the default value of the Virtual HUB options
 void SiSetDefaultHubOption(HUB_OPTION *o)
 {
@@ -2418,6 +2423,7 @@ void SiSetDefaultHubOption(HUB_OPTION *o)
 	o->NoDhcpPacketLogOutsideHub = true;
 	o->AccessListIncludeFileCacheLifetime = ACCESS_LIST_INCLUDE_FILE_CACHE_LIFETIME;
 	o->RemoveDefGwOnDhcpForLocalhost = true;
+	o->FloodingSendQueueBufferQuota = DEFAULT_FLOODING_QUEUE_LENGTH;
 }
 
 // Create a default virtual HUB
@@ -2455,21 +2461,6 @@ void SiInitDefaultHubList(SERVER *s)
 	SiSetDefaultLogSetting(&g);
 	SetHubLogSetting(h, &g);
 
-	{
-		UINT i;
-		for (i = 0;i < 0;i++)
-		{
-			char tmp[MAX_SIZE];
-			USER *u;
-			sprintf(tmp, "user%u", i);
-			AcLock(h);
-			u = NewUser(tmp, L"test", L"", AUTHTYPE_ANONYMOUS, NULL);
-			AcAddUser(h, u);
-			ReleaseUser(u);
-			AcUnlock(h);
-		}
-	}
-
 	ReleaseHub(h);
 }
 
@@ -2491,11 +2482,6 @@ void SiSetDefaultLogSetting(HUB_LOG *g)
 		g->PacketLogConfig[PACKET_LOG_DHCP] = PACKET_LOG_HEADER;
 }
 
-// Test
-void SiTest(SERVER *s)
-{
-}
-
 // Set the initial configuration
 void SiLoadInitialConfiguration(SERVER *s)
 {
@@ -2511,6 +2497,8 @@ void SiLoadInitialConfiguration(SERVER *s)
 	s->BackupConfigOnlyWhenModified = true;
 
 	s->Weight = FARM_DEFAULT_WEIGHT;
+
+	SiLoadGlobalParamsCfg(NULL);
 
 	// KEEP related
 	Zero(&k, sizeof(k));
@@ -2537,7 +2525,7 @@ void SiLoadInitialConfiguration(SERVER *s)
 
 	// Initialize the password
 	{
-		Hash(s->HashedPassword, "", 0, true);
+		Sha0(s->HashedPassword, "", 0);
 	}
 
 	// Set the encryption algorithm name to default
@@ -2654,8 +2642,9 @@ bool SiLoadConfigurationFile(SERVER *s)
 	}
 
 
-	s->CfgRw = NewCfgRw(&root,
-		s->Cedar->Bridge == false ? server_config_filename : BRIDGE_CONFIG_FILE_NAME);
+	s->CfgRw = NewCfgRwEx2A(&root,
+		s->Cedar->Bridge == false ? server_config_filename : BRIDGE_CONFIG_FILE_NAME, false,
+		s->Cedar->Bridge == false ? SERVER_CONFIG_TEMPLATE_NAME : BRIDGE_CONFIG_TEMPLATE_NAME);
 
 	if (server_reset_setting)
 	{
@@ -2709,6 +2698,8 @@ void SiInitConfiguration(SERVER *s)
 		SLog(s->Cedar, "LS_LOAD_CONFIG_3");
 		SiLoadInitialConfiguration(s);
 
+		SetFifoCurrentReallocMemSize(MEM_FIFO_REALLOC_MEM_SIZE);
+
 		server_reset_setting = false;
 	}
 	else
@@ -2727,7 +2718,7 @@ void SiInitConfiguration(SERVER *s)
 		}
 	}
 
-	if (s->DisableDosProction)
+	if (s->DisableDosProtection)
 	{
 		DisableDosProtect();
 	}
@@ -2775,25 +2766,6 @@ void SiSetAzureEnable(SERVER *s, bool enabled)
 	}
 
 	s->EnableVpnAzure = enabled;
-}
-
-// Get the state of Enabled / Disabled of Azure Client
-bool SiGetAzureEnable(SERVER *s)
-{
-	// Validate arguments
-	if (s == NULL)
-	{
-		return false;
-	}
-
-	if (s->AzureClient != NULL)
-	{
-		return AcGetEnable(s->AzureClient);
-	}
-	else
-	{
-		return false;
-	}
 }
 
 // Apply the Config to the Azure Client
@@ -2846,7 +2818,6 @@ bool SiIsAzureSupported(SERVER *s)
 bool SiLoadConfigurationCfg(SERVER *s, FOLDER *root)
 {
 	FOLDER *f1, *f2, *f3, *f4, *f5, *f6, *f7, *f8, *f;
-	bool is_vgs_enabled = false;
 	// Validate arguments
 	if (s == NULL || root == NULL)
 	{
@@ -3133,6 +3104,10 @@ void SiWriteLocalBridges(FOLDER *f, SERVER *s)
 	CfgAddBool(f, "EnableSoftEtherKernelModeDriver", Win32GetEnableSeLow());
 #endif	// OS_WIN32
 
+#ifdef	UNIX_LINUX
+	CfgAddBool(f, "DoNotDisableOffloading", GetGlobalServerFlag(GSF_LOCALBRIDGE_NO_DISABLE_OFFLOAD));
+#endif	// UNIX_LINUX
+
 	LockList(s->Cedar->LocalBridgeList);
 	{
 		UINT i;
@@ -3211,6 +3186,10 @@ void SiLoadLocalBridges(SERVER *s, FOLDER *f)
 #ifdef	OS_WIN32
 	Win32EthSetShowAllIf(CfgGetBool(f, "ShowAllInterfaces"));
 #endif	// OS_WIN32
+
+#ifdef	UNIX_LINUX
+	SetGlobalServerFlag(GSF_LOCALBRIDGE_NO_DISABLE_OFFLOAD, CfgGetBool(f, "DoNotDisableOffloading"));
+#endif	// UNIX_LINUX
 
 	t = CfgEnumFolderToTokenList(f);
 
@@ -3900,7 +3879,6 @@ void SiLoadHubAccessLists(HUB *h, FOLDER *f)
 	for (i = 0;i < t->NumTokens;i++)
 	{
 		char *name = t->Token[i];
-		UINT id = ToInt(name);
 		SiLoadHubAccessCfg(h, CfgGetFolder(f, name));
 	}
 
@@ -3950,6 +3928,14 @@ void SiLoadHubOptionCfg(FOLDER *f, HUB_OPTION *o)
 	o->FixForDLinkBPDU = CfgGetBool(f, "FixForDLinkBPDU");
 	o->BroadcastLimiterStrictMode = CfgGetBool(f, "BroadcastLimiterStrictMode");
 	o->MaxLoggedPacketsPerMinute = CfgGetInt(f, "MaxLoggedPacketsPerMinute");
+	if (CfgIsItem(f, "FloodingSendQueueBufferQuota"))
+	{
+		o->FloodingSendQueueBufferQuota = CfgGetInt(f, "FloodingSendQueueBufferQuota");
+	}
+	else
+	{
+		o->FloodingSendQueueBufferQuota = DEFAULT_FLOODING_QUEUE_LENGTH;
+	}
 	o->DoNotSaveHeavySecurityLogs = CfgGetBool(f, "DoNotSaveHeavySecurityLogs");
 
 	if (CfgIsItem(f, "DropBroadcastsInPrivacyFilterMode"))
@@ -4006,9 +3992,18 @@ void SiLoadHubOptionCfg(FOLDER *f, HUB_OPTION *o)
 	}
 
 	o->DisableKernelModeSecureNAT = CfgGetBool(f, "DisableKernelModeSecureNAT");
+	o->DisableIpRawModeSecureNAT = CfgGetBool(f, "DisableIpRawModeSecureNAT");
 	o->DisableUserModeSecureNAT = CfgGetBool(f, "DisableUserModeSecureNAT");
 	o->DisableCheckMacOnLocalBridge = CfgGetBool(f, "DisableCheckMacOnLocalBridge");
 	o->DisableCorrectIpOffloadChecksum = CfgGetBool(f, "DisableCorrectIpOffloadChecksum");
+	o->SuppressClientUpdateNotification = CfgGetBool(f, "SuppressClientUpdateNotification");
+	o->AssignVLanIdByRadiusAttribute = CfgGetBool(f, "AssignVLanIdByRadiusAttribute");
+	o->DenyAllRadiusLoginWithNoVlanAssign = CfgGetBool(f, "DenyAllRadiusLoginWithNoVlanAssign");
+	o->SecureNAT_RandomizeAssignIp = CfgGetBool(f, "SecureNAT_RandomizeAssignIp");
+	o->DetectDormantSessionInterval = CfgGetInt(f, "DetectDormantSessionInterval");
+	o->NoPhysicalIPOnPacketLog = CfgGetBool(f, "NoPhysicalIPOnPacketLog");
+	o->UseHubNameAsDhcpUserClassOption = CfgGetBool(f, "UseHubNameAsDhcpUserClassOption");
+	o->UseHubNameAsRadiusNasId = CfgGetBool(f, "UseHubNameAsRadiusNasId");
 
 	// Enabled by default
 	if (CfgIsItem(f, "ManageOnlyPrivateIP"))
@@ -4079,9 +4074,16 @@ void SiWriteHubOptionCfg(FOLDER *f, HUB_OPTION *o)
 	}
 	CfgAddBool(f, "BroadcastLimiterStrictMode", o->BroadcastLimiterStrictMode);
 	CfgAddInt(f, "MaxLoggedPacketsPerMinute", o->MaxLoggedPacketsPerMinute);
+	CfgAddInt(f, "FloodingSendQueueBufferQuota", o->FloodingSendQueueBufferQuota);
 	CfgAddBool(f, "DoNotSaveHeavySecurityLogs", o->DoNotSaveHeavySecurityLogs);
 	CfgAddBool(f, "DropBroadcastsInPrivacyFilterMode", o->DropBroadcastsInPrivacyFilterMode);
 	CfgAddBool(f, "DropArpInPrivacyFilterMode", o->DropArpInPrivacyFilterMode);
+	CfgAddBool(f, "SuppressClientUpdateNotification", o->SuppressClientUpdateNotification);
+	CfgAddBool(f, "AssignVLanIdByRadiusAttribute", o->AssignVLanIdByRadiusAttribute);
+	CfgAddBool(f, "DenyAllRadiusLoginWithNoVlanAssign", o->DenyAllRadiusLoginWithNoVlanAssign);
+	CfgAddBool(f, "SecureNAT_RandomizeAssignIp", o->SecureNAT_RandomizeAssignIp);
+	CfgAddBool(f, "NoPhysicalIPOnPacketLog", o->NoPhysicalIPOnPacketLog);
+	CfgAddInt(f, "DetectDormantSessionInterval", o->DetectDormantSessionInterval);
 	CfgAddBool(f, "NoLookBPDUBridgeId", o->NoLookBPDUBridgeId);
 	CfgAddInt(f, "AdjustTcpMssValue", o->AdjustTcpMssValue);
 	CfgAddBool(f, "DisableAdjustTcpMss", o->DisableAdjustTcpMss);
@@ -4098,9 +4100,12 @@ void SiWriteHubOptionCfg(FOLDER *f, HUB_OPTION *o)
 	CfgAddInt(f, "SecureNAT_MaxIcmpSessionsPerIp", o->SecureNAT_MaxIcmpSessionsPerIp);
 	CfgAddInt(f, "AccessListIncludeFileCacheLifetime", o->AccessListIncludeFileCacheLifetime);
 	CfgAddBool(f, "DisableKernelModeSecureNAT", o->DisableKernelModeSecureNAT);
+	CfgAddBool(f, "DisableIpRawModeSecureNAT", o->DisableIpRawModeSecureNAT);
 	CfgAddBool(f, "DisableUserModeSecureNAT", o->DisableUserModeSecureNAT);
 	CfgAddBool(f, "DisableCheckMacOnLocalBridge", o->DisableCheckMacOnLocalBridge);
 	CfgAddBool(f, "DisableCorrectIpOffloadChecksum", o->DisableCorrectIpOffloadChecksum);
+	CfgAddBool(f, "UseHubNameAsDhcpUserClassOption", o->UseHubNameAsDhcpUserClassOption);
+	CfgAddBool(f, "UseHubNameAsRadiusNasId", o->UseHubNameAsRadiusNasId);
 }
 
 // Write the user
@@ -4902,6 +4907,10 @@ void SiWriteHubCfg(FOLDER *f, HUB *h)
 		CfgAddInt(f, "RadiusServerPort", h->RadiusServerPort);
 		CfgAddInt(f, "RadiusRetryInterval", h->RadiusRetryInterval);
 		CfgAddStr(f, "RadiusSuffixFilter", h->RadiusSuffixFilter);
+		CfgAddStr(f, "RadiusRealm", h->RadiusRealm);
+
+		CfgAddBool(f, "RadiusConvertAllMsChapv2AuthRequestToEap", h->RadiusConvertAllMsChapv2AuthRequestToEap);
+		CfgAddBool(f, "RadiusUsePeapInsteadOfEap", h->RadiusUsePeapInsteadOfEap);
 	}
 	Unlock(h->RadiusOptionLock);
 
@@ -5067,6 +5076,10 @@ void SiLoadHubCfg(SERVER *s, FOLDER *f, char *name)
 			interval = CfgGetInt(f, "RadiusRetryInterval");
 
 			CfgGetStr(f, "RadiusSuffixFilter", h->RadiusSuffixFilter, sizeof(h->RadiusSuffixFilter));
+			CfgGetStr(f, "RadiusRealm", h->RadiusRealm, sizeof(h->RadiusRealm));
+
+			h->RadiusConvertAllMsChapv2AuthRequestToEap = CfgGetBool(f, "RadiusConvertAllMsChapv2AuthRequestToEap");
+			h->RadiusUsePeapInsteadOfEap = CfgGetBool(f, "RadiusUsePeapInsteadOfEap");
 
 			if (interval == 0)
 			{
@@ -5096,7 +5109,7 @@ void SiLoadHubCfg(SERVER *s, FOLDER *f, char *name)
 		// Password
 		if (CfgGetByte(f, "HashedPassword", h->HashedPassword, sizeof(h->HashedPassword)) != sizeof(h->HashedPassword))
 		{
-			Hash(h->HashedPassword, "", 0, true);
+			Sha0(h->HashedPassword, "", 0);
 		}
 		if (CfgGetByte(f, "SecurePassword", h->SecurePassword, sizeof(h->SecurePassword)) != sizeof(h->SecurePassword))
 		{
@@ -5619,7 +5632,6 @@ void SiLoadHubs(SERVER *s, FOLDER *f)
 {
 	UINT i;
 	FOLDER *hub_folder;
-	CEDAR *c;
 	TOKEN_LIST *t;
 	bool b = false;
 	// Validate arguments
@@ -5627,7 +5639,6 @@ void SiLoadHubs(SERVER *s, FOLDER *f)
 	{
 		return;
 	}
-	c = s->Cedar;
 
 	t = CfgEnumFolderToTokenList(f);
 	for (i = 0;i < t->NumTokens;i++)
@@ -5671,8 +5682,8 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 	char tmp[MAX_SIZE];
 	X *x = NULL;
 	K *k = NULL;
-	bool cluster_allowed = false;
-	UINT num_connections_per_ip = 0;
+	FOLDER *params_folder;
+	UINT i;
 	// Validate arguments
 	if (s == NULL || f == NULL)
 	{
@@ -5690,7 +5701,18 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		s->AutoSaveConfigSpan = MAKESURE(s->AutoSaveConfigSpan, SERVER_FILE_SAVE_INTERVAL_MIN, SERVER_FILE_SAVE_INTERVAL_MAX);
 	}
 
+	i = CfgGetInt(f, "MaxConcurrentDnsClientThreads");
+	if (i != 0)
+	{
+		SetGetIpThreadMaxNum(i);
+	}
+	else
+	{
+		SetGetIpThreadMaxNum(DEFAULT_GETIP_THREAD_MAX_NUM);
+	}
+
 	s->DontBackupConfig = CfgGetBool(f, "DontBackupConfig");
+	CfgGetIp(f, "ListenIP", &s->ListenIP);
 
 	if (CfgIsItem(f, "BackupConfigOnlyWhenModified"))
 	{
@@ -5700,6 +5722,19 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 	{
 		s->BackupConfigOnlyWhenModified = true;
 	}
+
+	// Server log switch type
+	if (CfgIsItem(f, "ServerLogSwitchType"))
+	{
+		UINT st = CfgGetInt(f, "ServerLogSwitchType");
+
+		SetLogSwitchType(s->Logger, st);
+	}
+
+	SetMaxLogSize(CfgGetInt64(f, "LoggerMaxLogSize"));
+
+	params_folder = CfgGetFolder(f, "GlobalParams");
+	SiLoadGlobalParamsCfg(params_folder);
 
 	c = s->Cedar;
 	Lock(c->lock);
@@ -5769,7 +5804,7 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		s->Cedar->DisableIPv6Listener = CfgGetBool(f, "DisableIPv6Listener");
 
 		// DoS
-		s->DisableDosProction = CfgGetBool(f, "DisableDosProction");
+		s->DisableDosProtection = CfgGetBool(f, "DisableDosProtection");
 
 		// Num Connections Per IP
 		SetMaxConnectionsPerIp(CfgGetInt(f, "MaxConnectionsPerIP"));
@@ -5781,10 +5816,12 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		s->DisableDeadLockCheck = CfgGetBool(f, "DisableDeadLockCheck");
 
 		// Eraser
+		SetEraserCheckInterval(CfgGetInt(f, "AutoDeleteCheckIntervalSecs"));
 		s->Eraser = NewEraser(s->Logger, CfgGetInt64(f, "AutoDeleteCheckDiskFreeSpaceMin"));
 
 		// WebUI
 		s->UseWebUI = CfgGetBool(f, "UseWebUI");
+
 
 		// WebTimePage
 		s->UseWebTimePage = CfgGetBool(f, "UseWebTimePage");
@@ -5810,11 +5847,18 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		// Disable the OpenVPN server function
 		s->DisableOpenVPNServer = CfgGetBool(f, "DisableOpenVPNServer");
 
+		// OpenVPN Default Option String
+		if (CfgGetStr(f, "OpenVPNDefaultClientOption", tmp, sizeof(tmp)))
+		{
+			if (IsEmptyStr(tmp) == false)
+			{
+				StrCpy(c->OpenVPNDefaultClientOption,
+					sizeof(c->OpenVPNDefaultClientOption), tmp);
+			}
+		}
+
 		// Disable the NAT-traversal feature
 		s->DisableNatTraversal = CfgGetBool(f, "DisableNatTraversal");
-
-		// Intel AES
-		s->DisableIntelAesAcceleration = CfgGetBool(f, "DisableIntelAesAcceleration");
 
 		if (s->Cedar->Bridge == false)
 		{
@@ -5888,10 +5932,7 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		if (CfgGetStr(f, "CipherName", tmp, sizeof(tmp)))
 		{
 			StrUpper(tmp);
-			if (CheckCipherListName(tmp))
-			{
-				SetCedarCipherList(c, tmp);
-			}
+			SetCedarCipherList(c, tmp);
 		}
 
 		// Traffic information
@@ -5901,18 +5942,13 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		}
 		Unlock(c->TrafficLock);
 
-		// Get whether the current license allows cluster mode
-		cluster_allowed = true;
-
-
 		// Type of server
-		s->UpdatedServerType = s->ServerType = 
-			cluster_allowed ? CfgGetInt(f, "ServerType") : SERVER_TYPE_STANDALONE;
+		s->UpdatedServerType = s->ServerType = CfgGetInt(f, "ServerType");
 
 		// Password
 		if (CfgGetByte(f, "HashedPassword", s->HashedPassword, sizeof(s->HashedPassword)) != sizeof(s->HashedPassword))
 		{
-			Hash(s->HashedPassword, "", 0, true);
+			Sha0(s->HashedPassword, "", 0);
 		}
 
 		if (s->ServerType != SERVER_TYPE_STANDALONE)
@@ -5990,8 +6026,117 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 
 		// Configuration of VPN Azure Client
 		s->EnableVpnAzure = CfgGetBool(f, "EnableVpnAzure");
+
+		// Disable GetHostName when accepting TCP
+		s->DisableGetHostNameWhenAcceptTcp = CfgGetBool(f, "DisableGetHostNameWhenAcceptTcp");
+
+		if (s->DisableGetHostNameWhenAcceptTcp)
+		{
+			DisableGetHostNameWhenAcceptInit();
+		}
+
+		// Disable core dump on UNIX
+		s->DisableCoreDumpOnUnix = CfgGetBool(f, "DisableCoreDumpOnUnix");
+
+		// Disable session reconnect
+		SetGlobalServerFlag(GSF_DISABLE_SESSION_RECONNECT, CfgGetBool(f, "DisableSessionReconnect"));
+
+		c->SslAcceptSettings.Tls_Disable1_0 = CfgGetBool(f, "Tls_Disable1_0");
+		c->SslAcceptSettings.Tls_Disable1_1 = CfgGetBool(f, "Tls_Disable1_1");
+		c->SslAcceptSettings.Tls_Disable1_2 = CfgGetBool(f, "Tls_Disable1_2");
+
+		s->StrictSyslogDatetimeFormat = CfgGetBool(f, "StrictSyslogDatetimeFormat");
+                // Bits of Diffie-Hellman parameters
+		c->DhParamBits = CfgGetInt(f, "DhParamBits");
+		if (c->DhParamBits == 0)
+		{
+			c->DhParamBits = DH_PARAM_BITS_DEFAULT;
+		}
+
+		SetDhParam(DhNewFromBits(c->DhParamBits));
+		if (s->OpenVpnServerUdp)
+		{
+			OpenVpnServerUdpSetDhParam(s->OpenVpnServerUdp, DhNewFromBits(c->DhParamBits));
+		}
 	}
 	Unlock(c->lock);
+
+#ifdef	OS_UNIX
+	if (s->DisableCoreDumpOnUnix)
+	{
+		UnixDisableCoreDump();
+	}
+#endif	// OS_UNIX
+}
+
+// Load global params
+void SiLoadGlobalParamsCfg(FOLDER *f)
+{
+	SiLoadGlobalParamItem(GP_MAX_SEND_SOCKET_QUEUE_SIZE, CfgGetInt(f, "MAX_SEND_SOCKET_QUEUE_SIZE"));
+	SiLoadGlobalParamItem(GP_MIN_SEND_SOCKET_QUEUE_SIZE, CfgGetInt(f, "MIN_SEND_SOCKET_QUEUE_SIZE"));
+	SiLoadGlobalParamItem(GP_MAX_SEND_SOCKET_QUEUE_NUM, CfgGetInt(f, "MAX_SEND_SOCKET_QUEUE_NUM"));
+	SiLoadGlobalParamItem(GP_SELECT_TIME, CfgGetInt(f, "SELECT_TIME"));
+	SiLoadGlobalParamItem(GP_SELECT_TIME_FOR_NAT, CfgGetInt(f, "SELECT_TIME_FOR_NAT"));
+	SiLoadGlobalParamItem(GP_MAX_STORED_QUEUE_NUM, CfgGetInt(f, "MAX_STORED_QUEUE_NUM"));
+	SiLoadGlobalParamItem(GP_MAX_BUFFERING_PACKET_SIZE, CfgGetInt(f, "MAX_BUFFERING_PACKET_SIZE"));
+	SiLoadGlobalParamItem(GP_HUB_ARP_SEND_INTERVAL, CfgGetInt(f, "HUB_ARP_SEND_INTERVAL"));
+	SiLoadGlobalParamItem(GP_MAC_TABLE_EXPIRE_TIME, CfgGetInt(f, "MAC_TABLE_EXPIRE_TIME"));
+	SiLoadGlobalParamItem(GP_IP_TABLE_EXPIRE_TIME, CfgGetInt(f, "IP_TABLE_EXPIRE_TIME"));
+	SiLoadGlobalParamItem(GP_IP_TABLE_EXPIRE_TIME_DHCP, CfgGetInt(f, "IP_TABLE_EXPIRE_TIME_DHCP"));
+	SiLoadGlobalParamItem(GP_STORM_CHECK_SPAN, CfgGetInt(f, "STORM_CHECK_SPAN"));
+	SiLoadGlobalParamItem(GP_STORM_DISCARD_VALUE_START, CfgGetInt(f, "STORM_DISCARD_VALUE_START"));
+	SiLoadGlobalParamItem(GP_STORM_DISCARD_VALUE_END, CfgGetInt(f, "STORM_DISCARD_VALUE_END"));
+	SiLoadGlobalParamItem(GP_MAX_MAC_TABLES, CfgGetInt(f, "MAX_MAC_TABLES"));
+	SiLoadGlobalParamItem(GP_MAX_IP_TABLES, CfgGetInt(f, "MAX_IP_TABLES"));
+	SiLoadGlobalParamItem(GP_MAX_HUB_LINKS, CfgGetInt(f, "MAX_HUB_LINKS"));
+	SiLoadGlobalParamItem(GP_MEM_FIFO_REALLOC_MEM_SIZE, CfgGetInt(f, "MEM_FIFO_REALLOC_MEM_SIZE"));
+	SiLoadGlobalParamItem(GP_QUEUE_BUDGET, CfgGetInt(f, "QUEUE_BUDGET"));
+	SiLoadGlobalParamItem(GP_FIFO_BUDGET, CfgGetInt(f, "FIFO_BUDGET"));
+
+	SetFifoCurrentReallocMemSize(MEM_FIFO_REALLOC_MEM_SIZE);
+}
+
+// Load global param itesm
+void SiLoadGlobalParamItem(UINT id, UINT value)
+{
+	// Validate arguments
+	if (id == 0)
+	{
+		return;
+	}
+
+	vpn_global_parameters[id] = value;
+}
+
+// Write global params
+void SiWriteGlobalParamsCfg(FOLDER *f)
+{
+	// Validate arguments
+	if (f == NULL)
+	{
+		return;
+	}
+
+	CfgAddInt(f, "MAX_SEND_SOCKET_QUEUE_SIZE", MAX_SEND_SOCKET_QUEUE_SIZE);
+	CfgAddInt(f, "MIN_SEND_SOCKET_QUEUE_SIZE", MIN_SEND_SOCKET_QUEUE_SIZE);
+	CfgAddInt(f, "MAX_SEND_SOCKET_QUEUE_NUM", MAX_SEND_SOCKET_QUEUE_NUM);
+	CfgAddInt(f, "SELECT_TIME", SELECT_TIME);
+	CfgAddInt(f, "SELECT_TIME_FOR_NAT", SELECT_TIME_FOR_NAT);
+	CfgAddInt(f, "MAX_STORED_QUEUE_NUM", MAX_STORED_QUEUE_NUM);
+	CfgAddInt(f, "MAX_BUFFERING_PACKET_SIZE", MAX_BUFFERING_PACKET_SIZE);
+	CfgAddInt(f, "HUB_ARP_SEND_INTERVAL", HUB_ARP_SEND_INTERVAL);
+	CfgAddInt(f, "MAC_TABLE_EXPIRE_TIME", MAC_TABLE_EXPIRE_TIME);
+	CfgAddInt(f, "IP_TABLE_EXPIRE_TIME", IP_TABLE_EXPIRE_TIME);
+	CfgAddInt(f, "IP_TABLE_EXPIRE_TIME_DHCP", IP_TABLE_EXPIRE_TIME_DHCP);
+	CfgAddInt(f, "STORM_CHECK_SPAN", STORM_CHECK_SPAN);
+	CfgAddInt(f, "STORM_DISCARD_VALUE_START", STORM_DISCARD_VALUE_START);
+	CfgAddInt(f, "STORM_DISCARD_VALUE_END", STORM_DISCARD_VALUE_END);
+	CfgAddInt(f, "MAX_MAC_TABLES", MAX_MAC_TABLES);
+	CfgAddInt(f, "MAX_IP_TABLES", MAX_IP_TABLES);
+	CfgAddInt(f, "MAX_HUB_LINKS", MAX_HUB_LINKS);
+	CfgAddInt(f, "MEM_FIFO_REALLOC_MEM_SIZE", MEM_FIFO_REALLOC_MEM_SIZE);
+	CfgAddInt(f, "QUEUE_BUDGET", QUEUE_BUDGET);
+	CfgAddInt(f, "FIFO_BUDGET", FIFO_BUDGET);
 }
 
 // Write the server-specific settings
@@ -5999,11 +6144,14 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 {
 	BUF *b;
 	CEDAR *c;
+	FOLDER *params_folder;
 	// Validate arguments
 	if (f == NULL || s == NULL)
 	{
 		return;
 	}
+
+	CfgAddInt(f, "MaxConcurrentDnsClientThreads", GetGetIpThreadMaxNum());
 
 	CfgAddInt(f, "CurrentBuild", s->Cedar->Build);
 
@@ -6012,11 +6160,26 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 	CfgAddBool(f, "DontBackupConfig", s->DontBackupConfig);
 	CfgAddBool(f, "BackupConfigOnlyWhenModified", s->BackupConfigOnlyWhenModified);
 
+	CfgAddIp(f, "ListenIP", &s->ListenIP);
+
+	if (s->Logger != NULL)
+	{
+		CfgAddInt(f, "ServerLogSwitchType", s->Logger->SwitchType);
+	}
+
+	CfgAddInt64(f, "LoggerMaxLogSize", GetMaxLogSize());
+
+	params_folder = CfgCreateFolder(f, "GlobalParams");
+
+	if (params_folder != NULL)
+	{
+		SiWriteGlobalParamsCfg(params_folder);
+	}
+
 	c = s->Cedar;
 
 	Lock(c->lock);
 	{
-		bool is_vgs_cert = false;
 		FOLDER *syslog_f;
 		Lock(s->Keep->lock);
 		{
@@ -6046,7 +6209,7 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 		CfgAddBool(f, "DisableIPv6Listener", s->Cedar->DisableIPv6Listener);
 
 		// DoS
-		CfgAddBool(f, "DisableDosProction", s->DisableDosProction);
+		CfgAddBool(f, "DisableDosProtection", s->DisableDosProtection);
 
 		// MaxConnectionsPerIP
 		CfgAddInt(f, "MaxConnectionsPerIP", GetMaxConnectionsPerIp());
@@ -6059,9 +6222,11 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 
 		// Eraser related
 		CfgAddInt64(f, "AutoDeleteCheckDiskFreeSpaceMin", s->Eraser->MinFreeSpace);
+		CfgAddInt(f, "AutoDeleteCheckIntervalSecs", GetEraserCheckInterval());
 
 		// WebUI
 		CfgAddBool(f, "UseWebUI", s->UseWebUI);
+
 
 		// NoLinuxArpFilter
 		if (GetOsInfo()->OsType == OSTYPE_LINUX)
@@ -6091,21 +6256,17 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 			}
 		}
 
+		CfgAddStr(f, "OpenVPNDefaultClientOption", c->OpenVPNDefaultClientOption);
+
 		if (c->Bridge == false)
 		{
+			OPENVPN_SSTP_CONFIG config;
+
 			// VPN over ICMP
 			CfgAddBool(f, "EnableVpnOverIcmp", s->EnableVpnOverIcmp);
 
 			// VPN over DNS
 			CfgAddBool(f, "EnableVpnOverDns", s->EnableVpnOverDns);
-		}
-
-		// Intel AES
-		CfgAddBool(f, "DisableIntelAesAcceleration", s->DisableIntelAesAcceleration);
-
-		if (c->Bridge == false)
-		{
-			OPENVPN_SSTP_CONFIG config;
 
 			SiGetOpenVPNAndSSTPConfig(s, &config);
 
@@ -6121,19 +6282,15 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 		// Let the client not to send a signature
 		CfgAddBool(f, "NoSendSignature", s->NoSendSignature);
 
+		// Server certificate
+		b = XToBuf(c->ServerX, false);
+		CfgAddBuf(f, "ServerCert", b);
+		FreeBuf(b);
 
-		if (is_vgs_cert == false)
-		{
-			// Server certificate
-			b = XToBuf(c->ServerX, false);
-			CfgAddBuf(f, "ServerCert", b);
-			FreeBuf(b);
-
-			// Server private key
-			b = KToBuf(c->ServerK, false, NULL);
-			CfgAddBuf(f, "ServerKey", b);
-			FreeBuf(b);
-		}
+		// Server private key
+		b = KToBuf(c->ServerK, false, NULL);
+		CfgAddBuf(f, "ServerKey", b);
+		FreeBuf(b);
 
 		// Traffic information
 		Lock(c->TrafficLock);
@@ -6196,6 +6353,19 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 		{
 			CfgAddBool(f, "EnableVpnAzure", s->EnableVpnAzure);
 		}
+
+		CfgAddBool(f, "DisableGetHostNameWhenAcceptTcp", s->DisableGetHostNameWhenAcceptTcp);
+		CfgAddBool(f, "DisableCoreDumpOnUnix", s->DisableCoreDumpOnUnix);
+
+		CfgAddBool(f, "Tls_Disable1_0", c->SslAcceptSettings.Tls_Disable1_0);
+		CfgAddBool(f, "Tls_Disable1_1", c->SslAcceptSettings.Tls_Disable1_1);
+		CfgAddBool(f, "Tls_Disable1_2", c->SslAcceptSettings.Tls_Disable1_2);
+		CfgAddInt(f, "DhParamBits", c->DhParamBits);
+
+		// Disable session reconnect
+		CfgAddBool(f, "DisableSessionReconnect", GetGlobalServerFlag(GSF_DISABLE_SESSION_RECONNECT));
+
+		CfgAddBool(f, "StrictSyslogDatetimeFormat", s->StrictSyslogDatetimeFormat);
 	}
 	Unlock(c->lock);
 }
@@ -6440,16 +6610,6 @@ void StStartServer(bool bridge)
 	Unlock(server_lock);
 
 //	StartCedarLog();
-}
-
-// Get the server
-SERVER *StGetServer()
-{
-	if (server == NULL)
-	{
-		return NULL;
-	}
-	return server;
 }
 
 // Stop the server
@@ -7063,7 +7223,6 @@ void SiCalledEnumHub(SERVER *s, PACK *p, PACK *req)
 {
 	UINT i;
 	CEDAR *c;
-	UINT num = 0;
 	// Validate arguments
 	if (s == NULL || p == NULL || req == NULL)
 	{
@@ -7089,7 +7248,7 @@ void SiCalledEnumHub(SERVER *s, PACK *p, PACK *req)
 				PackAddIntEx(p, "NumSessionsClient", Count(h->NumSessionsClient), i, num);
 				PackAddIntEx(p, "NumSessionsBridge", Count(h->NumSessionsBridge), i, num);
 
-				PackAddIntEx(p, "NumMacTables", LIST_NUM(h->MacTable), i, num);
+				PackAddIntEx(p, "NumMacTables", HASH_LIST_NUM(h->MacHashTable), i, num);
 
 				PackAddIntEx(p, "NumIpTables", LIST_NUM(h->IpTable), i, num);
 
@@ -7217,10 +7376,17 @@ void SiCalledUpdateHub(SERVER *s, PACK *p)
 	o.NoLookBPDUBridgeId = PackGetBool(p, "NoLookBPDUBridgeId");
 	o.NoManageVlanId = PackGetBool(p, "NoManageVlanId");
 	o.MaxLoggedPacketsPerMinute = PackGetInt(p, "MaxLoggedPacketsPerMinute");
+	o.FloodingSendQueueBufferQuota = PackGetInt(p, "FloodingSendQueueBufferQuota");
 	o.DoNotSaveHeavySecurityLogs = PackGetBool(p, "DoNotSaveHeavySecurityLogs");
 	o.DropBroadcastsInPrivacyFilterMode = PackGetBool(p, "DropBroadcastsInPrivacyFilterMode");
 	o.DropArpInPrivacyFilterMode = PackGetBool(p, "DropArpInPrivacyFilterMode");
+	o.SuppressClientUpdateNotification = PackGetBool(p, "SuppressClientUpdateNotification");
+	o.AssignVLanIdByRadiusAttribute = PackGetBool(p, "AssignVLanIdByRadiusAttribute");
+	o.DenyAllRadiusLoginWithNoVlanAssign = PackGetBool(p, "DenyAllRadiusLoginWithNoVlanAssign");
+	o.SecureNAT_RandomizeAssignIp = PackGetBool(p, "SecureNAT_RandomizeAssignIp");
+	o.DetectDormantSessionInterval = PackGetInt(p, "DetectDormantSessionInterval");
 	o.VlanTypeId = PackGetInt(p, "VlanTypeId");
+	o.NoPhysicalIPOnPacketLog = PackGetBool(p, "NoPhysicalIPOnPacketLog");
 	if (o.VlanTypeId == 0)
 	{
 		o.VlanTypeId = MAC_PROTO_TAGVLAN;
@@ -7258,9 +7424,12 @@ void SiCalledUpdateHub(SERVER *s, PACK *p)
 		o.AccessListIncludeFileCacheLifetime = ACCESS_LIST_INCLUDE_FILE_CACHE_LIFETIME;
 	}
 	o.DisableKernelModeSecureNAT = PackGetBool(p, "DisableKernelModeSecureNAT");
+	o.DisableIpRawModeSecureNAT = PackGetBool(p, "DisableIpRawModeSecureNAT");
 	o.DisableUserModeSecureNAT = PackGetBool(p, "DisableUserModeSecureNAT");
 	o.DisableCheckMacOnLocalBridge = PackGetBool(p, "DisableCheckMacOnLocalBridge");
 	o.DisableCorrectIpOffloadChecksum = PackGetBool(p, "DisableCorrectIpOffloadChecksum");
+	o.UseHubNameAsDhcpUserClassOption = PackGetBool(p, "UseHubNameAsDhcpUserClassOption");
+	o.UseHubNameAsRadiusNasId = PackGetBool(p, "UseHubNameAsRadiusNasId");
 
 	save_packet_log = PackGetInt(p, "SavePacketLog");
 	packet_log_switch_type = PackGetInt(p, "PacketLogSwitchType");
@@ -7437,16 +7606,13 @@ void SiCalledDeleteMacTable(SERVER *s, PACK *p)
 		return;
 	}
 
-	LockList(h->MacTable);
+	LockHashList(h->MacHashTable);
 	{
-		if (IsInList(h->MacTable, (void *)key))
-		{
-			MAC_TABLE_ENTRY *e = (MAC_TABLE_ENTRY *)key;
-			Delete(h->MacTable, e);
-			Free(e);
-		}
+		MAC_TABLE_ENTRY *e = HashListKeyToPointer(h->MacHashTable, key);
+		DeleteHash(h->MacHashTable, e);
+		Free(e);
 	}
-	UnlockList(h->MacTable);
+	UnlockHashList(h->MacHashTable);
 
 	ReleaseHub(h);
 }
@@ -8172,27 +8338,6 @@ void SiStopFarmControl(SERVER *s)
 	ReleaseThread(s->FarmControlThread);
 }
 
-// HUB enumeration directive (asynchronous start)
-void SiCallEnumHubBegin(SERVER *s, FARM_MEMBER *f)
-{
-	// Validate arguments
-	if (s == NULL || f == NULL)
-	{
-		return;
-	}
-}
-
-// HUB enumeration directive (asynchronous end)
-void SiCallEnumHubEnd(SERVER *s, FARM_MEMBER *f)
-{
-	// Validate arguments
-	if (s == NULL || f == NULL)
-	{
-		return;
-	}
-}
-
-
 // HUB enumeration directive
 void SiCallEnumHub(SERVER *s, FARM_MEMBER *f)
 {
@@ -8289,11 +8434,11 @@ void SiCallEnumHub(SERVER *s, FARM_MEMBER *f)
 							}
 							UnlockList(h->SessionList);
 
-							LockList(h->MacTable);
+							LockHashList(h->MacHashTable);
 							{
-								hh->NumMacTables = LIST_NUM(h->MacTable);
+								hh->NumMacTables = HASH_LIST_NUM(h->MacHashTable);
 							}
-							UnlockList(h->MacTable);
+							UnlockHashList(h->MacHashTable);
 
 							LockList(h->IpTable);
 							{
@@ -9057,10 +9202,17 @@ void SiPackAddCreateHub(PACK *p, HUB *h)
 	PackAddBool(p, "NoSpinLockForPacketDelay", h->Option->NoSpinLockForPacketDelay);
 	PackAddInt(p, "BroadcastStormDetectionThreshold", h->Option->BroadcastStormDetectionThreshold);
 	PackAddInt(p, "MaxLoggedPacketsPerMinute", h->Option->MaxLoggedPacketsPerMinute);
+	PackAddInt(p, "FloodingSendQueueBufferQuota", h->Option->FloodingSendQueueBufferQuota);
 	PackAddBool(p, "DoNotSaveHeavySecurityLogs", h->Option->DoNotSaveHeavySecurityLogs);
 	PackAddBool(p, "DropBroadcastsInPrivacyFilterMode", h->Option->DropBroadcastsInPrivacyFilterMode);
 	PackAddBool(p, "DropArpInPrivacyFilterMode", h->Option->DropArpInPrivacyFilterMode);
+	PackAddBool(p, "SuppressClientUpdateNotification", h->Option->SuppressClientUpdateNotification);
+	PackAddBool(p, "AssignVLanIdByRadiusAttribute", h->Option->AssignVLanIdByRadiusAttribute);
+	PackAddBool(p, "DenyAllRadiusLoginWithNoVlanAssign", h->Option->DenyAllRadiusLoginWithNoVlanAssign);
 	PackAddInt(p, "ClientMinimumRequiredBuild", h->Option->ClientMinimumRequiredBuild);
+	PackAddBool(p, "SecureNAT_RandomizeAssignIp", h->Option->SecureNAT_RandomizeAssignIp);
+	PackAddBool(p, "NoPhysicalIPOnPacketLog", h->Option->NoPhysicalIPOnPacketLog);
+	PackAddInt(p, "DetectDormantSessionInterval", h->Option->DetectDormantSessionInterval);
 	PackAddBool(p, "FixForDLinkBPDU", h->Option->FixForDLinkBPDU);
 	PackAddBool(p, "BroadcastLimiterStrictMode", h->Option->BroadcastLimiterStrictMode);
 	PackAddBool(p, "NoLookBPDUBridgeId", h->Option->NoLookBPDUBridgeId);
@@ -9094,6 +9246,7 @@ void SiPackAddCreateHub(PACK *p, HUB *h)
 	PackAddInt(p, "SecureNAT_MaxIcmpSessionsPerIp", h->Option->SecureNAT_MaxIcmpSessionsPerIp);
 	PackAddInt(p, "AccessListIncludeFileCacheLifetime", h->Option->AccessListIncludeFileCacheLifetime);
 	PackAddBool(p, "DisableKernelModeSecureNAT", h->Option->DisableKernelModeSecureNAT);
+	PackAddBool(p, "DisableIpRawModeSecureNAT", h->Option->DisableIpRawModeSecureNAT);
 	PackAddBool(p, "DisableUserModeSecureNAT", h->Option->DisableUserModeSecureNAT);
 	PackAddBool(p, "DisableCheckMacOnLocalBridge", h->Option->DisableCheckMacOnLocalBridge);
 	PackAddBool(p, "DisableCorrectIpOffloadChecksum", h->Option->DisableCorrectIpOffloadChecksum);
@@ -9108,6 +9261,8 @@ void SiPackAddCreateHub(PACK *p, HUB *h)
 	PackAddInt(p, "SecurityLogSwitchType", h->LogSetting.SecurityLogSwitchType);
 	PackAddData(p, "HashedPassword", h->HashedPassword, SHA1_SIZE);
 	PackAddData(p, "SecurePassword", h->SecurePassword, SHA1_SIZE);
+	PackAddBool(p, "UseHubNameAsDhcpUserClassOption", h->Option->UseHubNameAsDhcpUserClassOption);
+	PackAddBool(p, "UseHubNameAsRadiusNasId", h->Option->UseHubNameAsRadiusNasId);
 
 	SiAccessListToPack(p, h->AccessList);
 
@@ -9124,7 +9279,7 @@ void SiHubUpdateProc(HUB *h)
 	SERVER *s;
 	UINT i;
 	// Validate arguments
-	if (h == NULL || h->Cedar->Server == NULL || h->Cedar->Server->ServerType != SERVER_TYPE_FARM_CONTROLLER)
+	if (h == NULL || h->Cedar == NULL || h->Cedar->Server == NULL || h->Cedar->Server->ServerType != SERVER_TYPE_FARM_CONTROLLER)
 	{
 		return;
 	}
@@ -9639,62 +9794,6 @@ PACK *SiCalledTask(FARM_CONTROLLER *f, PACK *p, char *taskname)
 	}
 
 	return ret;
-}
-
-// Call the task (asynchronous)
-FARM_TASK *SiCallTaskAsyncBegin(FARM_MEMBER *f, PACK *p, char *taskname)
-{
-	char tmp[MAX_PATH];
-	FARM_TASK *t;
-	// Validate arguments
-	if (f == NULL || p == NULL || taskname == NULL)
-	{
-		return NULL;
-	}
-
-	PackAddStr(p, "taskname", taskname);
-
-	Debug("Call Async Task [%s] (%s)\n", taskname, f->hostname);
-
-	Format(tmp, sizeof(tmp), "CLUSTER_CALL_ASYNC: Entering Call [%s] to %s", taskname, f->hostname);
-	SiDebugLog(f->Cedar->Server, tmp);
-
-	t = SiFarmServPostTask(f, p);
-	StrCpy(t->TaskName, sizeof(t->TaskName), taskname);
-	StrCpy(t->HostName, sizeof(t->HostName), f->hostname);
-	t->FarmMember = f;
-
-	return t;
-}
-
-// Get the results of the asynchronous task
-PACK *SiCallTaskAsyncEnd(CEDAR *c, FARM_TASK *t)
-{
-	PACK *p;
-	char taskname[MAX_PATH];
-	char hostname[MAX_PATH];
-	char tmp[MAX_SIZE];
-	// Validate arguments
-	if (t == NULL || c == NULL)
-	{
-		return NULL;
-	}
-
-	StrCpy(taskname, sizeof(taskname), t->TaskName);
-	StrCpy(hostname, sizeof(hostname), t->HostName);
-
-	p = SiFarmServWaitTask(t);
-	if (p == NULL)
-	{
-		Format(tmp, sizeof(tmp), "CLUSTER_CALL_ASYNC: Call ERROR [%s] to %s", taskname, hostname);
-		SiDebugLog(c->Server, tmp);
-		return NULL;
-	}
-
-	Format(tmp, sizeof(tmp), "CLUSTER_CALL_ASYNC: Retrieving Call Result [%s] to %s", taskname, hostname);
-	SiDebugLog(c->Server, tmp);
-
-	return p;
 }
 
 // Call the task
@@ -10224,8 +10323,6 @@ void SiConnectToControllerThread(THREAD *thread, void *param)
 
 	server = f->Server;
 
-	f->StartedTime = SystemTime64();
-
 	SLog(server->Cedar, "LS_FARM_CONNECT_1", server->ControllerName);
 
 	first_failed = true;
@@ -10577,16 +10674,20 @@ void SiUpdateCurrentRegion(CEDAR *c, char *region, bool force_update)
 // Create a server
 SERVER *SiNewServer(bool bridge)
 {
-	return SiNewServerEx(bridge, false);
+	return SiNewServerEx(bridge, false, false);
 }
-SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server)
+SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server, bool relay_server)
 {
 	SERVER *s;
 	LISTENER *inproc;
 	LISTENER *azure;
 	LISTENER *rudp;
 
+	SetGetIpThreadMaxNum(DEFAULT_GETIP_THREAD_MAX_NUM);
+
 	s = ZeroMalloc(sizeof(SERVER));
+
+	SetEraserCheckInterval(0);
 
 	SiInitHubCreateHistory(s);
 
@@ -10623,8 +10724,6 @@ SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server)
 	s->Cedar->CheckExpires = true;
 	s->ServerListenerList = NewList(CompareServerListener);
 	s->StartTime = SystemTime64();
-	s->Syslog = NewSysLog(NULL, 0);
-	s->SyslogLock = NewLock();
 	s->TasksFromFarmControllerLock = NewLock();
 
 	if (bridge)
@@ -10656,18 +10755,21 @@ SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server)
 	// Initialize the configuration
 	SiInitConfiguration(s);
 
+	s->Syslog = NewSysLog(NULL, 0, &s->Cedar->Server->ListenIP);
+	s->SyslogLock = NewLock();
 
-	if (s->DisableIntelAesAcceleration)
-	{
-		// Disable the Intel AES acceleration
-		DisableIntelAesAccel();
-	}
+	SetFifoCurrentReallocMemSize(MEM_FIFO_REALLOC_MEM_SIZE);
+
 
 	// Raise the priority
 	if (s->NoHighPriorityProcess == false)
 	{
 		OSSetHighPriority();
 	}
+
+#ifdef	OS_UNIX
+	UnixSetHighOomScore();
+#endif	// OS_UNIX
 
 	if (s->ServerType == SERVER_TYPE_FARM_MEMBER)
 	{
@@ -10729,7 +10831,3 @@ SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server)
 	return s;
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

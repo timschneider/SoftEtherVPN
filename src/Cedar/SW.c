@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -151,6 +166,7 @@ static SW_OLD_MSI old_msi_vpnbridge[] =
 static char *sfx_vpn_server_bridge_files[] =
 {
 	"vpnsetup.exe",
+	"vpnsetup_x64.exe",
 	"vpnserver.exe",
 	"vpnserver_x64.exe",
 	"vpnbridge.exe",
@@ -164,6 +180,7 @@ static char *sfx_vpn_server_bridge_files[] =
 static char *sfx_vpn_client_files[] =
 {
 	"vpnsetup.exe",
+	"vpnsetup_x64.exe",
 	"vpnclient.exe",
 	"vpnclient_x64.exe",
 	"vpncmgr.exe",
@@ -648,7 +665,7 @@ bool SwSfxCopyVgFiles(HWND hWnd, wchar_t *src, wchar_t *dst)
 	}
 
 	msg = L"The file \"%s\" was not found on the directory which the installer \"%s\" is located on.\r\n\r\n"
-		L"To continue the installation, the file \"%s\" is required on the same direcotry.\r\n"
+		L"To continue the installation, the file \"%s\" is required on the same directory.\r\n"
 		L"If you have extracted the installer from a ZIP archive, you have to also extract the file \"%s\" from the ZIP archive together.";
 
 	MsgBoxEx(hWnd, MB_ICONINFORMATION, msg, srcfilename, exefilename, srcfilename, srcfilename);
@@ -766,7 +783,14 @@ UINT SWExec()
 		MayaquaMinimalMode();
 	}
 
+#if defined(_DEBUG) || defined(DEBUG)	// In VC++ compilers, the macro is "_DEBUG", not "DEBUG".
+	// If set memcheck = true, the program will be vitally slow since it will log all malloc() / realloc() / free() calls to find the cause of memory leak.
+	// For normal debug we set memcheck = false.
+	// Please set memcheck = true if you want to test the cause of memory leaks.
+	InitMayaqua(false, true, 0, NULL);
+#else
 	InitMayaqua(false, false, 0, NULL);
+#endif
 	InitCedar();
 
 	if (is_datafile_exists == false)
@@ -879,9 +903,7 @@ void SwGenerateDefaultSfxFileName(wchar_t *name, UINT size)
 	}
 
 	UniFormat(name, size, L"easy-" GC_SW_SOFTETHER_PREFIX_W L"vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.exe",
-		CEDAR_VER / 100,
-		CEDAR_VER % 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 }
 
@@ -895,9 +917,7 @@ void SwGenerateDefaultZipFileName(wchar_t *name, UINT size)
 	}
 
 	UniFormat(name, size, L"web-" GC_SW_SOFTETHER_PREFIX_W L"vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.zip",
-		CEDAR_VER / 100,
-		CEDAR_VER % 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 }
 
@@ -1202,6 +1222,10 @@ UINT SwGetLangIcon(char *name)
 	else if (StrCmpi(name, "cn") == 0)
 	{
 		ret = ICO_LANG_CHINESE;
+	}
+	else if (StrCmpi(name, "tw") == 0)
+	{
+		ret = ICO_LANG_TRADITIONAL_CHINESE;
 	}
 
 	return ret;
@@ -1738,7 +1762,7 @@ UINT SwFinish(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard,
 	return 0;
 }
 
-// Error occuring screen
+// Error occurring screen
 UINT SwError(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WIZARD_PAGE *wizard_page, void *param)
 {
 	SW *sw = (SW *)param;
@@ -2445,6 +2469,7 @@ void SwDefineTasks(SW *sw, SW_TASK *t, SW_COMPONENT *c)
 	wchar_t dir_startup[MAX_PATH];
 	wchar_t tmp1[MAX_SIZE], tmp2[MAX_SIZE];
 	SW_TASK_COPY *setup_exe;
+	SW_TASK_COPY *setup_exe_x64;
 	// Validate arguments
 	if (sw == NULL || t == NULL || c == NULL)
 	{
@@ -2482,6 +2507,10 @@ void SwDefineTasks(SW *sw, SW_TASK *t, SW_COMPONENT *c)
 	// Add the Setup program (themselves) to the copy list
 	Add(t->CopyTasks, (setup_exe = SwNewCopyTask(src_setup_exe_filename,
 		L"vpnsetup.exe", src_setup_exe_dir, sw->InstallDir, true, true)));
+
+	// Add vpnsetup_x64.exe to the copy list
+	Add(t->CopyTasks, (setup_exe_x64 = SwNewCopyTask(L"vpnsetup_x64.exe",
+		L"vpnsetup_x64.exe", src_setup_exe_dir, sw->InstallDir, true, true)));
 
 	// Generate the file processing list for each component
 	if (c->Id == SW_CMP_VPN_SERVER)
@@ -2655,7 +2684,7 @@ void SwDefineTasks(SW *sw, SW_TASK *t, SW_COMPONENT *c)
 		SW_TASK_COPY *vpninstall;
 		wchar_t *src_config_filename;
 
-		CombinePathW(tmp, sizeof(tmp), sw->InstallDir, L"backup.vpn_vpnclient.config");
+		CombinePathW(tmp, sizeof(tmp), sw->InstallDir, L"backup.vpn_client.config");
 		Add(t->SetSecurityPaths, CopyUniStr(tmp));
 
 		if (x64 == false)
@@ -2915,15 +2944,13 @@ bool SwWebMain(SW *sw, WIZARD_PAGE *wp)
 		char package_name[MAX_SIZE];
 		ZIP_PACKER *z = NULL;
 
-		ToStr(ver_major, CEDAR_VER / 100);
-		ToStr(ver_minor, CEDAR_VER % 100);
-		ToStr(ver_build, CEDAR_BUILD);
+		ToStr(ver_major, CEDAR_VERSION_MAJOR);
+		ToStr(ver_minor, CEDAR_VERSION_MINOR);
+		ToStr(ver_build, CEDAR_VERSION_BUILD);
 
 		Format(package_name, sizeof(package_name),
 			GC_SW_SOFTETHER_PREFIX "vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.exe",
-			CEDAR_VER / 100,
-			CEDAR_VER % 100,
-			CEDAR_BUILD,
+			CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 			BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 
 		GetCurrentLang(&current_lang);
@@ -3151,7 +3178,7 @@ bool SwInstallMain(SW *sw, WIZARD_PAGE *wp, SW_COMPONENT *c)
 	}
 
 	// Install the SeLow
-	if (SuIsSupportedOs())
+	if (SuIsSupportedOs(true))
 	{
 		// Only in the system mode
 		if (c->InstallService && sw->IsSystemMode)
@@ -3167,9 +3194,29 @@ bool SwInstallMain(SW *sw, WIZARD_PAGE *wp, SW_COMPONENT *c)
 
 			if (install_su)
 			{
-				SwPerformPrint(wp, _UU("SW_PERFORM_MSG_INSTALL_SELOW"));
+				bool ret;
 
-				SuInstallDriver(false);
+				SwPerformPrint(wp, _UU("SW_PERFORM_MSG_INSTALL_SELOW"));
+				ret = SuInstallDriver(false);
+
+				if (ret == false)
+				{
+					if (MsIs64BitWindows() && MsIsWindows10())
+					{
+						void *proc_handle = NULL;
+						wchar_t exe[MAX_PATH];
+
+						CombinePathW(exe, sizeof(exe), MsGetExeDirNameW(), L"vpnsetup_x64.exe");
+
+						if (MsExecuteEx2W(exe, L"/SUINSTMODE:yes", &proc_handle, true))
+						{
+							if (proc_handle != NULL)
+							{
+								MsWaitProcessExit(proc_handle);
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -3901,7 +3948,7 @@ L_RETRY_LOG:
 
 		sw->LogFile->IsSystemMode = sw->IsSystemMode;
 		sw->LogFile->Component = sw->CurrentComponent;
-		sw->LogFile->Build = CEDAR_BUILD;
+		sw->LogFile->Build = CEDAR_VERSION_BUILD;
 
 		if (SwSaveLogFile(sw, log_filename, sw->LogFile) == false)
 		{
@@ -3932,7 +3979,7 @@ L_RETRY_LOG:
 		MsRegWriteStrEx2W(sw->IsSystemMode ? REG_LOCAL_MACHINE : REG_CURRENT_USER,
 			keyname, "InstalledDir", sw->InstallDir, false, true);
 		MsRegWriteIntEx2(sw->IsSystemMode ? REG_LOCAL_MACHINE : REG_CURRENT_USER,
-			keyname, "InstalledBuild", CEDAR_BUILD, false, true);
+			keyname, "InstalledBuild", CEDAR_VERSION_BUILD, false, true);
 
 		// Set the language to registry
 		MsRegWriteStrEx2(REG_CURRENT_USER, SW_REG_KEY, "Last User Language",
@@ -4109,7 +4156,7 @@ L_RETRY_LINK:
 		{
 			// Show the error message if it fails
 			UINT msgret;
-			UniFormat(tmp, sizeof(tmp), _UU("SW_PERFORM_MSG_CRAETE_LINK_ERROR"), lnk_fullpath);
+			UniFormat(tmp, sizeof(tmp), _UU("SW_PERFORM_MSG_CREATE_LINK_ERROR"), lnk_fullpath);
 			msgret = SwPerformMsgBox(wp, MB_ICONEXCLAMATION | MB_YESNO, tmp);
 
 			if (msgret == IDYES)
@@ -4986,7 +5033,7 @@ UINT SwDir(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WI
 			break;
 		}
 
-		if (logfile != NULL && (logfile->Build > CEDAR_BUILD) && UniIsEmptyStr(sw->auto_setting_path) == false &&
+		if (logfile != NULL && (logfile->Build > CEDAR_VERSION_BUILD) && UniIsEmptyStr(sw->auto_setting_path) == false &&
 			sw->CurrentComponent->Id == SW_CMP_VPN_CLIENT && logfile->Component->Id == SW_CMP_VPN_CLIENT)
 		{
 			// In the case of the VPN Client, show a message if a newer version is installed and
@@ -5008,7 +5055,7 @@ UINT SwDir(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WI
 			{
 				errmsg = _UU("SW_DIR_DST_IS_OTHER_PRODUCT");
 			}
-			else if ((skip_ver_check == false) && (logfile->Build > CEDAR_BUILD))
+			else if ((skip_ver_check == false) && (logfile->Build > CEDAR_VERSION_BUILD))
 			{
 				errmsg = _UU("SW_DIR_DST_IS_NEWER");
 			}
@@ -5817,9 +5864,6 @@ void SwUiMain(SW *sw)
 	GetCedarVersion(ver, sizeof(ver));
 	UniFormat(verstr, sizeof(verstr), _UU("SW_TITLE"), ver);
 
-	// DO NOT REMOVE THIS INDICATION !!!
-	UniStrCat(verstr, sizeof(verstr), L" - Customized Version");
-
 	w = NewWizard(ICO_SETUP, BMP_SELOGO49x49, verstr, sw);
 
 	w->CloseConfirmMsg = _UU("SW_EXIT_CONFIRM");
@@ -6478,6 +6522,7 @@ void SwParseCommandLine(SW *sw)
 		{"ISEASYINSTALLER", NULL, NULL, NULL, NULL, },
 		{"DISABLEAUTOIMPORT", NULL, NULL, NULL, NULL, },
 		{"ISWEBINSTALLER", NULL, NULL, NULL, NULL, },
+		{"SUINSTMODE", NULL, NULL, NULL, NULL, },
 	};
 	// Validate arguments
 	if (sw == NULL)
@@ -6505,6 +6550,7 @@ void SwParseCommandLine(SW *sw)
 			sw->LangNow = GetParamYes(o, "LANGNOW");
 			sw->SetLangAndReboot = GetParamYes(o, "SETLANGANDREBOOT");
 			sw->HideStartCommand = GetParamYes(o, "HIDESTARTCOMMAND");
+			sw->SuInstMode = GetParamYes(o, "SUINSTMODE");
 
 			// Special mode
 			if (sw->LanguageMode == false)
@@ -6575,6 +6621,15 @@ UINT SWExecMain()
 			sw->ExitCode = 0;
 		}
 	}
+	else if (sw->SuInstMode)
+	{
+		// SuInst mode
+		sw->ExitCode = 0;
+		if (SuInstallDriver(false) == false)
+		{
+			sw->ExitCode = SW_EXIT_CODE_INTERNAL_ERROR;
+		}
+	}
 	else
 	{
 		// Normal mode
@@ -6624,7 +6679,3 @@ UINT SWExecMain()
 
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

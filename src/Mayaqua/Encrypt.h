@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -113,7 +128,7 @@ void RAND_Free_For_SoftEther();
 #define	DES_IV_SIZE					8			// DES IV size
 #define DES_BLOCK_SIZE				8			// DES block size
 #define DES3_KEY_SIZE				(8 * 3)		// 3DES key size
-#define RSA_KEY_SIZE				128			// RSA key size
+#define RSA_KEY_SIZE				1024		// RSA key size
 #define DH_KEY_SIZE					128			// DH key size
 #define	RSA_MIN_SIGN_HASH_SIZE		(15 + SHA1_HASH_SIZE)	// Minimum RSA hash size
 #define	RSA_SIGN_HASH_SIZE			(RSA_MIN_SIGN_HASH_SIZE)	// RSA hash size
@@ -126,8 +141,17 @@ void RAND_Free_For_SoftEther();
 #define	AES_IV_SIZE					16			// AES IV size
 #define	AES_MAX_KEY_SIZE			32			// Maximum AES key size
 
+// IANA definitions taken from IKEv1 Phase 1
+#define SHA1_160						2
+#define SHA2_256						4
+#define SHA2_384						5
+#define SHA2_512						6
+
 // HMAC block size
 #define	HMAC_BLOCK_SIZE					64
+// The block size for sha-384 and sha-512 as defined by rfc4868
+#define HMAC_BLOCK_SIZE_1024					128
+#define HMAC_BLOCK_SIZE_MAX					512
 
 #define DH_GROUP1_PRIME_768 \
 	"FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" \
@@ -155,10 +179,74 @@ void RAND_Free_For_SoftEther();
 
 #define	DH_SIMPLE_160	"AEE7561459353C95DDA966AE1FD25D95CD46E935"
 
+#define	DH_SET_2048 \
+	"FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" \
+	"29024E088A67CC74020BBEA63B139B22514A08798E3404DD" \
+	"EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245" \
+	"E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED" \
+	"EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D" \
+	"C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F" \
+	"83655D23DCA3AD961C62F356208552BB9ED529077096966D" \
+	"670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B" \
+	"E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9" \
+	"DE2BCBF6955817183995497CEA956AE515D2261898FA0510" \
+	"15728E5A8AACAA68FFFFFFFFFFFFFFFF"
+
+#define	DH_SET_3072	\
+	"FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"\
+	"29024E088A67CC74020BBEA63B139B22514A08798E3404DD"\
+	"EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"\
+	"E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"\
+	"EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"\
+	"C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"\
+	"83655D23DCA3AD961C62F356208552BB9ED529077096966D"\
+	"670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B"\
+	"E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9"\
+	"DE2BCBF6955817183995497CEA956AE515D2261898FA0510"\
+	"15728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64"\
+	"ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7"\
+	"ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6B"\
+	"F12FFA06D98A0864D87602733EC86A64521F2B18177B200C"\
+	"BBE117577A615D6C770988C0BAD946E208E24FA074E5AB31"\
+	"43DB5BFCE0FD108E4B82D120A93AD2CAFFFFFFFFFFFFFFFF"
+
+#define	DH_SET_4096 \
+	"FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" \
+	"29024E088A67CC74020BBEA63B139B22514A08798E3404DD" \
+	"EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245" \
+	"E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED" \
+	"EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D" \
+	"C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F" \
+	"83655D23DCA3AD961C62F356208552BB9ED529077096966D" \
+	"670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B" \
+	"E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9" \
+	"DE2BCBF6955817183995497CEA956AE515D2261898FA0510" \
+	"15728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64" \
+	"ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7" \
+	"ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6B" \
+	"F12FFA06D98A0864D87602733EC86A64521F2B18177B200C" \
+	"BBE117577A615D6C770988C0BAD946E208E24FA074E5AB31" \
+	"43DB5BFCE0FD108E4B82D120A92108011A723C12A787E6D7" \
+	"88719A10BDBA5B2699C327186AF4E23C1A946834B6150BDA" \
+	"2583E9CA2AD44CE8DBBBC2DB04DE8EF92E8EFC141FBECAA6" \
+	"287C59474E6BC05D99B2964FA090C3A2233BA186515BE7ED" \
+	"1F612970CEE2D7AFB81BDD762170481CD0069127D5B05AA9" \
+	"93B4EA988D8FDDC186FFB7DC90A6C08F4DF435C934063199" \
+	"FFFFFFFFFFFFFFFF"
+
 // Macro
 #define	HASHED_DATA(p)			(((UCHAR *)p) + 15)
 
-
+// OpenSSL <1.1 Shims
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#	define EVP_CTRL_AEAD_GET_TAG EVP_CTRL_GCM_GET_TAG
+#	define EVP_CTRL_AEAD_SET_TAG EVP_CTRL_GCM_SET_TAG
+#	define EVP_PKEY_get0_RSA(obj) ((obj)->pkey.rsa)
+#	define EVP_PKEY_base_id(pkey) ((pkey)->type)
+#	define X509_get0_notBefore(x509) ((x509)->cert_info->validity->notBefore)
+#	define X509_get0_notAfter(x509) ((x509)->cert_info->validity->notAfter)
+#	define X509_get_serialNumber(x509) ((x509)->cert_info->serialNumber)
+#endif
 
 // Crypt context
 struct CRYPT
@@ -197,6 +285,8 @@ struct X
 	bool do_not_free;
 	bool is_compatible_bit;
 	UINT bits;
+	bool has_basic_constraints;
+	char issuer_url[256];
 };
 
 // Key
@@ -222,6 +312,8 @@ struct X_CRL
 #define	MD5_SIZE	16
 #define	SHA1_SIZE	20
 #define	SHA256_SIZE	32
+#define	SHA384_SIZE	48
+#define	SHA512_SIZE	64
 
 // Key element of DES
 struct DES_KEY_VALUE
@@ -258,7 +350,7 @@ struct DH_CTX
 struct CIPHER
 {
 	char Name[MAX_PATH];
-	bool IsNullCipher;
+	bool IsNullCipher, IsAeadCipher;
 	const struct evp_cipher_st *Cipher;
 	struct evp_cipher_ctx_st *Ctx;
 	bool Encrypt;
@@ -269,8 +361,10 @@ struct CIPHER
 struct MD
 {
 	char Name[MAX_PATH];
-	const struct env_md_st *Md;
-	struct hmac_ctx_st *Ctx;
+	bool IsNullMd;
+	bool IsHMac;
+	const struct evp_md_st *Md;
+	void *Ctx;
 	UINT Size;
 };
 
@@ -282,14 +376,8 @@ extern LOCK **ssl_lock_obj;
 CRYPT *NewCrypt(void *key, UINT size);
 void FreeCrypt(CRYPT *c);
 void Encrypt(CRYPT *c, void *dst, void *src, UINT size);
-void Hash(void *dst, void *src, UINT size, bool sha);
-void HashSha1(void *dst, void *src, UINT size);
-void HashSha256(void *dst, void *src, UINT size);
-void HashMd4(void *dst, void *src, UINT size);
-void HashMd4(void *dst, void *src, UINT size);
 void InitCryptLibrary();
 void Rand(void *buf, UINT size);
-void Rand128(void *buf);
 UINT HashToUINT(void *data, UINT size);
 UINT64 Rand64();
 UINT Rand32();
@@ -298,14 +386,12 @@ UCHAR Rand8();
 bool Rand1();
 UINT HashPtrToUINT(void *p);
 
-void CertTest();
 BIO *BufToBio(BUF *b);
 BUF *BioToBuf(BIO *bio);
 BIO *NewBio();
 void FreeBio(BIO *bio);
 X *BioToX(BIO *bio, bool text);
 X *BufToX(BUF *b, bool text);
-BUF *SkipBufBeforeString(BUF *b, char *str);
 void FreeX509(X509 *x509);
 void FreeX(X *x);
 BIO *XToBio(X *x, bool text);
@@ -323,9 +409,7 @@ X *FileToX(char *filename);
 X *FileToXW(wchar_t *filename);
 bool XToFile(X *x, char *filename, bool text);
 bool XToFileW(X *x, wchar_t *filename, bool text);
-K *FileToK(char *filename, bool private_key, char *password);
 K *FileToKW(wchar_t *filename, bool private_key, char *password);
-bool KToFile(K *k, char *filename, bool text, char *password);
 bool KToFileW(K *k, wchar_t *filename, bool text, char *password);
 bool CheckXandK(X *x, K *k);
 bool CompareX(X *x1, X *x2);
@@ -338,7 +422,7 @@ bool CompareName(NAME *n1, NAME *n2);
 K *GetKFromX(X *x);
 bool CheckSignature(X *x, K *k);
 X *X509ToX(X509 *x509);
-bool CheckX(X *x, X *x_issuer);
+bool CheckXEx(X *x, X *x_issuer, bool check_name, bool check_date);
 bool Asn1TimeToSystem(SYSTEMTIME *s, void *asn1_time);
 bool StrToSystem(SYSTEMTIME *s, char *str);
 UINT64 Asn1TimeToUINT64(void *asn1_time);
@@ -358,9 +442,9 @@ X *NewRootX(K *pub, K *priv, NAME *name, UINT days, X_SERIAL *serial);
 X509 *NewX509(K *pub, K *priv, X *ca, NAME *name, UINT days, X_SERIAL *serial);
 X *NewX(K *pub, K *priv, X *ca, NAME *name, UINT days, X_SERIAL *serial);
 UINT GetDaysUntil2038();
+UINT GetDaysUntil2038Ex();
 X_SERIAL *NewXSerial(void *data, UINT size);
 void FreeXSerial(X_SERIAL *serial);
-char *ByteToStr(BYTE *src, UINT src_size);
 P12 *BioToP12(BIO *bio);
 P12 *PKCS12ToP12(PKCS12 *pkcs12);
 P12 *BufToP12(BUF *b);
@@ -368,9 +452,6 @@ BIO *P12ToBio(P12 *p12);
 BUF *P12ToBuf(P12 *p12);
 void FreePKCS12(PKCS12 *pkcs12);
 void FreeP12(P12 *p12);
-P12 *FileToP12(char *filename);
-P12 *FileToP12W(wchar_t *filename);
-bool P12ToFile(P12 *p12, char *filename);
 bool P12ToFileW(P12 *p12, wchar_t *filename);
 bool ParseP12(P12 *p12, X **x, K **k, char *password);
 bool IsEncryptedP12(P12 *p12);
@@ -382,15 +463,10 @@ void GetPrintNameFromX(wchar_t *str, UINT size, X *x);
 void GetPrintNameFromXA(char *str, UINT size, X *x);
 void GetPrintNameFromName(wchar_t *str, UINT size, NAME *name);
 void GetAllNameFromX(wchar_t *str, UINT size, X *x);
-void GetAllNameFromA(char *str, UINT size, X *x);
 void GetAllNameFromName(wchar_t *str, UINT size, NAME *name);
 void GetAllNameFromNameEx(wchar_t *str, UINT size, NAME *name);
-void GetAllNameFromXEx(wchar_t *str, UINT size, X *x);
-void GetAllNameFromXExA(char *str, UINT size, X *x);
-BUF *BigNumToBuf(BIGNUM *bn);
+BUF *BigNumToBuf(const BIGNUM *bn);
 BIGNUM *BinToBigNum(void *data, UINT size);
-BIGNUM *BufToBigNum(BUF *b);
-char *BigNumToStr(BIGNUM *bn);
 X_SERIAL *CloneXSerial(X_SERIAL *src);
 bool CompareXSerial(X_SERIAL *s1, X_SERIAL *s2);
 void GetXDigest(X *x, UCHAR *buf, bool sha1);
@@ -400,44 +476,20 @@ NAME *CopyName(NAME *n);
 bool RsaGen(K **priv, K **pub, UINT bit);
 bool RsaCheck();
 bool RsaCheckEx();
-bool RsaPublicEncrypt(void *dst, void *src, UINT size, K *k);
-bool RsaPrivateDecrypt(void *dst, void *src, UINT size, K *k);
-bool RsaPrivateEncrypt(void *dst, void *src, UINT size, K *k);
-bool RsaPublicDecrypt(void *dst, void *src, UINT size, K *k);
 bool RsaSign(void *dst, void *src, UINT size, K *k);
 bool RsaSignEx(void *dst, void *src, UINT size, K *k, UINT bits);
 bool HashForSign(void *dst, UINT dst_size, void *src, UINT src_size);
 bool RsaVerify(void *data, UINT data_size, void *sign, K *k);
 bool RsaVerifyEx(void *data, UINT data_size, void *sign, K *k, UINT bits);
 UINT RsaPublicSize(K *k);
-void RsaPublicToBin(K *k, void *data);
 BUF *RsaPublicToBuf(K *k);
-K *RsaBinToPublic(void *data, UINT size);
-
-X_CRL *FileToXCrl(char *filename);
-X_CRL *FileToXCrlW(wchar_t *filename);
-X_CRL *BufToXCrl(BUF *b);
-void FreeXCrl(X_CRL *r);
-bool IsXRevokedByXCrl(X *x, X_CRL *r);
-bool IsXRevoked(X *x);
 
 DES_KEY_VALUE *DesNewKeyValue(void *value);
-DES_KEY_VALUE *DesRandKeyValue();
 void DesFreeKeyValue(DES_KEY_VALUE *v);
-DES_KEY *Des3NewKey(void *k1, void *k2, void *k3);
-void Des3FreeKey(DES_KEY *k);
-DES_KEY *DesNewKey(void *k1);
-void DesFreeKey(DES_KEY *k);
-DES_KEY *Des3RandKey();
-DES_KEY *DesRandKey();
-void Des3Encrypt(void *dest, void *src, UINT size, DES_KEY *key, void *ivec);
 void Des3Encrypt2(void *dest, void *src, UINT size, DES_KEY_VALUE *k1, DES_KEY_VALUE *k2, DES_KEY_VALUE *k3, void *ivec);
-void Des3Decrypt(void *dest, void *src, UINT size, DES_KEY *key, void *ivec);
 void Des3Decrypt2(void *dest, void *src, UINT size, DES_KEY_VALUE *k1, DES_KEY_VALUE *k2, DES_KEY_VALUE *k3, void *ivec);
-void Sha1(void *dst, void *src, UINT size);
-void Md5(void *dst, void *src, UINT size);
-void MacSha1(void *dst, void *key, UINT key_size, void *data, UINT data_size);
-void MacSha196(void *dst, void *key, void *data, UINT data_size);
+void Sha(UINT sha_type, void *dst, void *src, UINT size);
+
 void DesEncrypt(void *dest, void *src, UINT size, DES_KEY_VALUE *k, void *ivec);
 void DesDecrypt(void *dest, void *src, UINT size, DES_KEY_VALUE *k, void *ivec);
 void DesEcbEncrypt(void *dst, void *src, void *key_7bytes);
@@ -447,45 +499,54 @@ DH_CTX *DhNewGroup1();
 DH_CTX *DhNewGroup2();
 DH_CTX *DhNewGroup5();
 DH_CTX *DhNewSimple160();
+DH_CTX *DhNew2048();
+DH_CTX *DhNew3072();
+DH_CTX *DhNew4096();
+DH_CTX *DhNewFromBits(UINT bits);
 DH_CTX *DhNew(char *prime, UINT g);
 void DhFree(DH_CTX *dh);
-BUF *DhToBuf(DH_CTX *dh);
 
 AES_KEY_VALUE *AesNewKey(void *data, UINT size);
 void AesFreeKey(AES_KEY_VALUE *k);
 void AesEncrypt(void *dest, void *src, UINT size, AES_KEY_VALUE *k, void *ivec);
 void AesDecrypt(void *dest, void *src, UINT size, AES_KEY_VALUE *k, void *ivec);
 
-bool IsIntelAesNiSupported();
-void CheckIfIntelAesNiSupportedInit();
-
-#ifdef	USE_INTEL_AESNI_LIBRARY
-void AesEncryptWithIntel(void *dest, void *src, UINT size, AES_KEY_VALUE *k, void *ivec);
-void AesDecryptWithIntel(void *dest, void *src, UINT size, AES_KEY_VALUE *k, void *ivec);
-#endif	// USE_INTEL_AESNI_LIBRARY
+bool IsAesNiSupported();
 
 void OpenSSL_InitLock();
 void OpenSSL_FreeLock();
 void OpenSSL_Lock(int mode, int n, const char *file, int line);
 unsigned long OpenSSL_Id(void);
 void FreeOpenSSLThreadState();
+char *OpenSSL_Error();
 
+// Encryption/Decryption
 CIPHER *NewCipher(char *name);
 void FreeCipher(CIPHER *c);
 void SetCipherKey(CIPHER *c, void *key, bool enc);
 UINT CipherProcess(CIPHER *c, void *iv, void *dest, void *src, UINT size);
+UINT CipherProcessAead(CIPHER *c, void *iv, void *tag, UINT tag_size, void *dest, void *src, UINT src_size, void *aad, UINT aad_size);
 
+// Hashing
 MD *NewMd(char *name);
+MD *NewMdEx(char *name, bool hmac);
+bool SetMdKey(MD *md, void *key, UINT key_size);
+UINT MdProcess(MD *md, void *dest, void *src, UINT size);
 void FreeMd(MD *md);
-void SetMdKey(MD *md, void *key, UINT key_size);
-void MdProcess(MD *md, void *dest, void *src, UINT size);
-void Enc_tls1_PRF(unsigned char *label, int label_len, const unsigned char *sec,
-				  int slen, unsigned char *out1, int olen);
+void HashMd4(void *dst, void *src, UINT size);
+void HashSha1(void *dst, void *src, UINT size);
+void Md5(void *dst, void *src, UINT size);
+void Sha(UINT sha_type, void *dst, void *src, UINT size);
+void Sha0(void *dst, void *src, UINT size);
+void Sha1(void *dst, void *src, UINT size);
+void Sha2_256(void *dst, void *src, UINT size);
+void Sha2_384(void *dst, void *src, UINT size);
+void Sha2_512(void *dst, void *src, UINT size);
+UINT HMacSha1(void *dst, void *key, UINT key_size, void *data, UINT data_size);
+UINT HMacMd5(void *dst, void *key, UINT key_size, void *data, UINT data_size);
+void Enc_tls1_PRF(unsigned char *label, int label_len, const unsigned char *sec, int slen, unsigned char *out1, int olen);
 
-void HMacSha1(void *dst, void *key, UINT key_size, void *data, UINT data_size);
-void HMacMd5(void *dst, void *key, UINT key_size, void *data, UINT data_size);
-
-void DisableIntelAesAccel();
+int GetSslClientCertIndex();
 
 #ifdef	ENCRYPT_C
 // Inner function
@@ -495,7 +556,3 @@ void DisableIntelAesAccel();
 
 #endif	// ENCRYPT_H
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

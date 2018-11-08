@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -242,7 +257,7 @@ POLICY_ITEM *GetPolicyItem(UINT id)
 // Does cascade connection support the specified policy?
 bool PolicyIsSupportedForCascade(UINT i)
 {
-	if (i == 0 || i == 4 || i == 5 || i == 9 || i == 12 || i == 13 ||
+	if (i == 0 || i == 4 || i == 5 || i == 12 || i == 13 ||
 		i == 14 || i == 19 || i == 20 || i == 21 || i == 26 || i == 30 || i == 31 || i == 36)
 	{
 		// These items are not supported by cascade connection.
@@ -356,6 +371,11 @@ bool IsUserName(char *name)
 	}
 
 	if (IsSafeStr(name) == false)
+	{
+		return false;
+	}
+
+	if (StrCmpi(name, "link") == 0)
 	{
 		return false;
 	}
@@ -681,7 +701,7 @@ void HashPassword(void *dst, char *username, char *password)
 	StrUpper(username_upper);
 	WriteBuf(b, password, StrLen(password));
 	WriteBuf(b, username_upper, StrLen(username_upper));
-	Hash(dst, b->Buf, b->Size, true);
+	Sha0(dst, b->Buf, b->Size);
 
 	FreeBuf(b);
 	Free(username_upper);
@@ -826,38 +846,6 @@ void SetUserAuthData(USER *u, UINT authtype, void *authdata)
 		// Set new authentication data
 		u->AuthType = authtype;
 		u->AuthData = authdata;
-	}
-	Unlock(u->lock);
-}
-
-// Cumulate group traffic data
-void AddGroupTraffic(USERGROUP *g, TRAFFIC *diff)
-{
-	// Validate arguments
-	if (g == NULL || diff == NULL)
-	{
-		return;
-	}
-
-	Lock(g->lock);
-	{
-		AddTraffic(g->Traffic, diff);
-	}
-	Unlock(g->lock);
-}
-
-// Cumulate user traffic data
-void AddUserTraffic(USER *u, TRAFFIC *diff)
-{
-	// Validate arguments
-	if (u == NULL || diff == NULL)
-	{
-		return;
-	}
-
-	Lock(u->lock);
-	{
-		AddTraffic(u->Traffic, diff);
 	}
 	Unlock(u->lock);
 }
@@ -1192,7 +1180,7 @@ void CleanupUser(USER *u)
 		ReleaseGroup(u->Group);
 	}
 
-	// Free authntication data
+	// Free authentication data
 	FreeAuthData(u->AuthType, u->AuthData);
 
 	if (u->Policy)
@@ -1206,7 +1194,7 @@ void CleanupUser(USER *u)
 	Free(u);
 }
 
-// Free authntication data
+// Free authentication data
 void FreeAuthData(UINT authtype, void *authdata)
 {
 	AUTHPASSWORD *pw = (AUTHPASSWORD *)authdata;
@@ -1428,7 +1416,3 @@ int CompareUserName(void *p1, void *p2)
 	return StrCmpi(u1->Name, u2->Name);
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

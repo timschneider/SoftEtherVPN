@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -118,6 +133,8 @@
 
 #endif	// VPN_SPEED
 
+void InitProcessCallOnce();
+
 #ifdef	VPN_EXE
 // To build the executable file
 #ifdef	WIN32
@@ -127,6 +144,7 @@ int main(int argc, char *argv[]);
 int PASCAL WinMain(HINSTANCE hInst, HINSTANCE hPrev, char *CmdLine, int CmdShow)
 {
 	char *argv[] = { CmdLine, };
+	InitProcessCallOnce();
 	return main(1, argv);
 }
 #endif	// WIN32
@@ -197,10 +215,11 @@ int PASCAL WinMain(HINSTANCE hInst, HINSTANCE hPrev, char *CmdLine, int CmdShow)
 #define	PROBE_DATA(data, size)
 #endif	// USE_PROBE
 
-// About Intel AES-NI Library
-#if	(defined(OS_WIN32) || (defined(UNIX_LINUX) && (defined(CPU_X86) || defined(CPU_X64))))
-// Supports only for Linux (x86 / x64) or Windows
-#define	USE_INTEL_AESNI_LIBRARY
+// Determine the performance / memory strategy
+#if	(defined(CPU_X86) || defined(CPU_X64) || defined(CPU_X86_X64) || defined(CPU_SPARC) || defined(CPU_SPARC64) || defined(OS_WIN32) || defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(i386) || defined(__i386) || defined(__i386__) || defined(__ia64__) || defined(__IA64__) || defined(_IA64))
+#define	USE_STRATEGY_PERFORMACE
+#else
+#define	USE_STRATEGY_LOW_MEMORY
 #endif
 
 // Macro that displays the current time
@@ -376,6 +395,7 @@ extern char *cmdline;
 extern wchar_t *uni_cmdline;
 extern bool g_little_endian;
 extern LOCK *tick_manual_lock;
+extern bool g_foreground;
 
 // Kernel state
 #define	NUM_KERNEL_STATUS	128
@@ -479,7 +499,6 @@ if (kernel_status_inited) {					\
 #define	KS_FREEFIFO_COUNT		37		// Number of times the FIFO object is deleted
 #define	KS_READ_FIFO_COUNT		38		// Number of calls ReadFifo
 #define	KS_WRITE_FIFO_COUNT		39		// Number of calls WriteFifo
-#define	KS_PEEK_FIFO_COUNT		40		// Number of calls PeekFifo
 // List related
 #define	KS_NEWLIST_COUNT		41		// Number of calls NewList
 #define	KS_FREELIST_COUNT		42		// Number of times the object LIST was deleted
@@ -592,6 +611,7 @@ USHORT CalcChecksum16(void *buf, UINT size);
 #pragma comment(lib, "version.lib")
 #pragma comment(lib, "Netapi32.lib")
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "crypt32.lib")
 #pragma warning( disable : 4099 )
 #endif	// OS_WIN32
 
@@ -604,7 +624,3 @@ USHORT CalcChecksum16(void *buf, UINT size);
 #endif	// MAYAQUA_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

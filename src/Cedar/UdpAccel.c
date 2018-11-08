@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -101,14 +116,16 @@
 // Polling process
 void UdpAccelPoll(UDP_ACCEL *a)
 {
-	UCHAR *tmp = a->TmpBuf;
 	IP nat_t_ip;
 	UINT num_ignore_errors = 0;
+	UCHAR *tmp;
 	// Validate arguments
 	if (a == NULL)
 	{
 		return;
 	}
+
+	tmp = a->TmpBuf;
 
 	Lock(a->NatT_Lock);
 	{
@@ -327,7 +344,7 @@ void UdpAccelPoll(UDP_ACCEL *a)
 	else
 	{
 		// NAT_T is disabled, but there is a reference host (such as VGC)
-		if (a->UseUdpIpQuery)
+		if (a->UseUdpIpQuery || a->UseSuperRelayQuery)
 		{
 		}
 	}
@@ -853,7 +870,7 @@ void UdpAccelCalcKey(UCHAR *key, UCHAR *common_key, UCHAR *iv)
 	Copy(tmp, common_key, UDP_ACCELERATION_COMMON_KEY_SIZE);
 	Copy(tmp + UDP_ACCELERATION_COMMON_KEY_SIZE, iv, UDP_ACCELERATION_PACKET_IV_SIZE);
 
-	HashSha1(key, tmp, sizeof(tmp));
+	Sha1(key, tmp, sizeof(tmp));
 }
 
 // Set the current time
@@ -1019,6 +1036,11 @@ UDP_ACCEL *NewUdpAccel(CEDAR *cedar, IP *ip, bool client_mode, bool random_port,
 
 	a->IsIPv6 = IsIP6(ip);
 
+	if (a->IsIPv6)
+	{
+		a->NoNatT = true;
+	}
+
 	a->RecvBlockQueue = NewQueue();
 
 	Rand(a->NextIv, sizeof(a->NextIv));
@@ -1073,6 +1095,8 @@ void NatT_GetIpThread(THREAD *thread, void *param)
 {
 	UDP_ACCEL *a;
 	char hostname[MAX_SIZE];
+	static IP dummy_ip = {0};
+	UINT num_retry = 0;
 	// Validate arguments
 	if (thread == NULL || param == NULL)
 	{
@@ -1081,11 +1105,17 @@ void NatT_GetIpThread(THREAD *thread, void *param)
 
 	a = (UDP_ACCEL *)param;
 
-	RUDPGetRegisterHostNameByIP(hostname, sizeof(hostname), NULL);
+	if (IsZeroIP(&dummy_ip))
+	{
+		SetIP(&dummy_ip, 11, Rand8(), Rand8(), Rand8());
+	}
+
+	RUDPGetRegisterHostNameByIP(hostname, sizeof(hostname), &dummy_ip);
 
 	while (a->NatT_Halt == false)
 	{
 		IP ip;
+		UINT wait_time = UDP_NAT_T_GET_IP_INTERVAL;
 
 		// Get the IP address
 		bool ret = GetIP4Ex(&ip, hostname, 0, &a->NatT_Halt);
@@ -1110,7 +1140,11 @@ void NatT_GetIpThread(THREAD *thread, void *param)
 		}
 
 		// Fail to get
-		Wait(a->NatT_HaltEvent, UDP_NAT_T_GET_IP_INTERVAL);
+		num_retry++;
+
+		wait_time = (UINT)(MIN((UINT64)UDP_NAT_T_GET_IP_INTERVAL * (UINT64)num_retry, (UINT64)UDP_NAT_T_GET_IP_INTERVAL_MAX));
+
+		Wait(a->NatT_HaltEvent, wait_time);
 	}
 }
 
@@ -1166,7 +1200,3 @@ void FreeUdpAccel(UDP_ACCEL *a)
 	Free(a);
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

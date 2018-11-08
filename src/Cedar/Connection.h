@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -104,6 +119,8 @@
 
 #define	KEEP_ALIVE_STRING				"Internet Connection Keep Alive Packet"
 
+#define	UPDATE_LAST_COMM_TIME(v, n)		{if ((v) <= (n)) { v = (n); } }
+
 // KEEP CONNECT structure
 struct KEEP
 {
@@ -127,7 +144,7 @@ struct SECURE_SIGN
 	char SecurePrivateKeyName[MAX_SECURE_DEVICE_FILE_LEN + 1];	// Secure device secret key name
 	X *ClientCert;					// Client certificate
 	UCHAR Random[SHA1_SIZE];		// Random value for signature
-	UCHAR Signature[128];			// Signed data
+	UCHAR Signature[4096 / 8];		// Signed data
 	UINT UseSecureDeviceId;
 	UINT BitmapId;					// Bitmap ID
 };
@@ -172,7 +189,6 @@ struct CLIENT_OPTION
 	bool RequireBridgeRoutingMode;					// Bridge or routing mode
 	bool DisableQoS;								// Disable the VoIP / QoS function
 	bool FromAdminPack;								// For Administration Pack
-	bool NoTls1;									// Do not use TLS 1.0
 	bool NoUdpAcceleration;							// Do not use UDP acceleration mode
 	UCHAR HostUniqueKey[SHA1_SIZE];					// Host unique key
 };
@@ -243,6 +259,7 @@ struct BLOCK
 	bool PriorityQoS;				// Priority packet for VoIP / QoS function
 	UINT Ttl;						// TTL value (Used only in ICMP NAT of Virtual.c)
 	UINT Param1;					// Parameter 1
+	bool IsFlooding;				// Is flooding packet
 };
 
 // Connection structure
@@ -292,7 +309,6 @@ struct CONNECTION
 	IP ClientIp;					// Client IP address
 	char ClientHostname[MAX_HOST_NAME_LEN + 1];	// Client host name
 	UINT Type;						// Type
-	bool DontUseTls1;				// Do not use TLS 1.0
 	void *hWndForUI;				// Parent window
 	bool IsInProc;					// In-process
 	char InProcPrefix[64];			// Prefix
@@ -301,6 +317,10 @@ struct CONNECTION
 	bool WasSstp;					// Processed the SSTP
 	bool WasDatProxy;				// DAT proxy processed
 	UCHAR CToken_Hash[SHA1_SIZE];	// CTOKEN_HASH
+	UINT LastTcpQueueSize;			// The last queue size of TCP sockets
+	UINT LastPacketQueueSize;		// The last queue size of packets
+	UINT LastRecvFifoTotalSize;		// The last RecvFifo total size
+	UINT LastRecvBlocksNum;			// The last ReceivedBlocks num
 };
 
 
@@ -319,7 +339,7 @@ void StartTunnelingMode(CONNECTION *c);
 void EndTunnelingMode(CONNECTION *c);
 void DisconnectTcpSockets(CONNECTION *c);
 void ConnectionReceive(CONNECTION *c, CANCEL *c1, CANCEL *c2);
-void ConnectionSend(CONNECTION *c);
+void ConnectionSend(CONNECTION *c, UINT64 now);
 TCPSOCK *NewTcpSock(SOCK *s);
 void FreeTcpSock(TCPSOCK *ts);
 BLOCK *NewBlock(void *data, UINT size, int compress);
@@ -330,8 +350,7 @@ void SendKeepAlive(CONNECTION *c, TCPSOCK *ts);
 void DisconnectUDPSockets(CONNECTION *c);
 void PutUDPPacketData(CONNECTION *c, void *data, UINT size);
 void SendDataWithUDP(SOCK *s, CONNECTION *c);
-void InsertReveicedBlockToQueue(CONNECTION *c, BLOCK *block);
-void InitTcpSockRc4Key(TCPSOCK *ts, bool server_mode);
+void InsertReceivedBlockToQueue(CONNECTION *c, BLOCK *block, bool no_lock);
 UINT TcpSockRecv(SESSION *s, TCPSOCK *ts, void *data, UINT size);
 UINT TcpSockSend(SESSION *s, TCPSOCK *ts, void *data, UINT size);
 void WriteSendFifo(SESSION *s, TCPSOCK *ts, void *data, UINT size);
@@ -350,7 +369,3 @@ UINT GetMachineRand();
 
 
 #endif	// CONNECTION_H
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

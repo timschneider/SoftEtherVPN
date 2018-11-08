@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -182,10 +197,14 @@ char *OsTypeToStr(UINT type)
 		return "Windows 8.1\0\n";
 	case OSTYPE_WINDOWS_SERVER_81:
 		return "Windows Server 2012 R2\0\n";
-	case OSTYPE_WINDOWS_9:
-		return "Windows 8.2 or later\0\n";
-	case OSTYPE_WINDOWS_SERVER_9:
-		return "Windows Server 8.2 or later\0\n";
+	case OSTYPE_WINDOWS_10:
+		return "Windows 10\0\n";
+	case OSTYPE_WINDOWS_SERVER_10:
+		return "Windows Server 2016\0\n";
+	case OSTYPE_WINDOWS_11:
+		return "Newer than Windows 10\0\n";
+	case OSTYPE_WINDOWS_SERVER_11:
+		return "Newer than Windows Server 2016\0\n";
 	case OSTYPE_UNIX_UNKNOWN:
 		return "UNIX System\0\n";
 	case OSTYPE_LINUX:
@@ -309,10 +328,6 @@ UINT OSThreadId()
 }
 
 // Rename
-bool OSFileRename(char *old_name, char *new_name)
-{
-	return os->FileRename(old_name, new_name);
-}
 bool OSFileRenameW(wchar_t *old_name, wchar_t *new_name)
 {
 	return os->FileRenameW(old_name, new_name);
@@ -331,50 +346,30 @@ bool OSFileSeek(void *pData, UINT mode, int offset)
 }
 
 // Delete the file
-bool OSFileDelete(char *name)
-{
-	return os->FileDelete(name);
-}
 bool OSFileDeleteW(wchar_t *name)
 {
 	return os->FileDeleteW(name);
 }
 
 // Create a directory
-bool OSMakeDir(char *name)
-{
-	return os->MakeDir(name);
-}
 bool OSMakeDirW(wchar_t *name)
 {
 	return os->MakeDirW(name);
 }
 
 // Delete the directory
-bool OSDeleteDir(char *name)
-{
-	return os->DeleteDir(name);
-}
 bool OSDeleteDirW(wchar_t *name)
 {
 	return os->DeleteDirW(name);
 }
 
 // Open the file
-void *OSFileOpen(char *name, bool write_mode, bool read_lock)
-{
-	return os->FileOpen(name, write_mode, read_lock);
-}
 void *OSFileOpenW(wchar_t *name, bool write_mode, bool read_lock)
 {
 	return os->FileOpenW(name, write_mode, read_lock);
 }
 
 // Create a file
-void *OSFileCreate(char *name)
-{
-	return os->FileCreate(name);
-}
 void *OSFileCreateW(wchar_t *name)
 {
 	return os->FileCreateW(name);
@@ -464,18 +459,6 @@ void OSGetSystemTime(SYSTEMTIME *system_time)
 	os->GetSystemTime(system_time);
 }
 
-// 32bit increment
-void OSInc32(UINT *value)
-{
-	os->Inc32(value);
-}
-
-// 32bit decrement
-void OSDec32(UINT *value)
-{
-	os->Dec32(value);
-}
-
 // Sleep the thread
 void OSSleep(UINT time)
 {
@@ -518,12 +501,6 @@ void OSSetEvent(EVENT *event)
 	os->SetEvent(event);
 }
 
-// Reset event
-void OSResetEvent(EVENT *event)
-{
-	os->ResetEvent(event);
-}
-
 // Wait for event
 bool OSWaitEvent(EVENT *event, UINT timeout)
 {
@@ -536,7 +513,3 @@ void OSFreeEvent(EVENT *event)
 	os->FreeEvent(event);
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

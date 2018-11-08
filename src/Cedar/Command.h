@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -166,13 +181,30 @@ struct TTC
 	THREAD *Thread;			// Thread
 	volatile bool Halt;		// Halting flag
 	bool *Cancel;			// Halting flag 2
-	SOCK_EVENT *SockEvent;	// Socket event
 	LIST *ItcSockList;		// Client socket list
 	TT_RESULT Result;		// Result
 	UINT ErrorCode;			// Error code
 	bool AbnormalTerminated;	// Abnormal termination
 	EVENT *StartEvent;		// Start event
 	EVENT *InitedEvent;		// Initialize completion notification event
+	LIST *WorkerThreadList;	// List of worker threads
+
+	UINT flag1, flag2;
+
+	UINT64 session_id;
+	UINT64 end_tick;
+	UINT64 start_tick;
+};
+
+// Traffic test worker thread
+struct TTC_WORKER
+{
+	THREAD *WorkerThread;
+	TTC *Ttc;
+	LIST *SockList;			// Client socket list
+	SOCK_EVENT *SockEvent;	// Socket event
+	EVENT *StartEvent;		// Start event
+	bool Ok;				// The result
 };
 
 // Server side socket
@@ -187,7 +219,10 @@ struct TTS_SOCK
 	UINT64 SessionId;		// Session ID
 	bool NoMoreSendData;	// Flag not to send more data
 	UINT64 FirstRecvTick;	// Time which the data has been received last
+	UINT64 FirstSendTick;	// Time which the data has been sent last
 	UINT64 Span;			// Period
+	UINT64 GiveupSpan;
+	UINT64 LastCommTime;
 };
 
 // Traffic test server
@@ -198,15 +233,22 @@ struct TTS
 	volatile bool Halt;		// Halting flag
 	UINT Port;				// Port number
 	THREAD *Thread;			// Thread
-	THREAD *WorkThread;		// Worker thread
 	THREAD *IPv6AcceptThread;	// IPv6 Accept thread
 	SOCK *ListenSocket;		// Socket to wait
 	SOCK *ListenSocketV6;	// Socket to wait (IPv6)
 	UINT ErrorCode;			// Error code
+	UINT IdSeed;			// ID value
+	LIST *WorkerList;		// Worker threads list
+};
+
+// Traffic test worker thread
+struct TTS_WORKER
+{
+	TTS *Tts;				// TTS
+	THREAD *WorkThread;		// Worker thread
 	SOCK_EVENT *SockEvent;	// Socket event
 	LIST *TtsSockList;		// Server socket list
 	bool NewSocketArrived;	// New socket has arrived
-	UINT IdSeed;			// ID value
 };
 
 // VPN Tools context
@@ -278,12 +320,9 @@ void CtPrint(CT *ct, CONSOLE *c);
 void CtPrintStandard(CT *ct, CONSOLE *c);
 void CtPrintRow(CONSOLE *c, UINT num, UINT *widths, wchar_t **strings, bool *rights, char separate_char);
 void VpnCmdInitBootPath();
-void OutRpcTtResult(PACK *p, TT_RESULT *t);
-void InRpcTtResult(PACK *p, TT_RESULT *t);
 
 void CmdPrintError(CONSOLE *c, UINT err);
 void CmdPrintAbout(CONSOLE *c);
-void CmdPrintRow(CONSOLE *c, wchar_t *title, wchar_t *tag, ...);
 wchar_t *CmdPromptPort(CONSOLE *c, void *param);
 wchar_t *CmdPromptChoosePassword(CONSOLE *c, void *param);
 bool CmdEvalPort(CONSOLE *c, wchar_t *str, void *param);
@@ -303,11 +342,8 @@ bool CmdEvalTcpOrUdp(CONSOLE *c, wchar_t *str, void *param);
 wchar_t *GetConnectionTypeStr(UINT type);
 bool CmdEvalHostAndSubnetMask4(CONSOLE *c, wchar_t *str, void *param);
 bool CmdEvalNetworkAndSubnetMask4(CONSOLE *c, wchar_t *str, void *param);
-bool CmdEvalNetworkAndSubnetMask6(CONSOLE *c, wchar_t *str, void *param);
-bool CmdEvalNetworkAndSubnetMask46(CONSOLE *c, wchar_t *str, void *param);
 bool CmdEvalIpAndMask4(CONSOLE *c, wchar_t *str, void *param);
 bool CmdEvalIpAndMask6(CONSOLE *c, wchar_t *str, void *param);
-bool CmdEvalIpAndMask46(CONSOLE *c, wchar_t *str, void *param);
 wchar_t *GetLogSwitchStr(UINT i);
 wchar_t *GetPacketLogNameStr(UINT i);
 UINT StrToLogSwitchType(char *str);
@@ -374,6 +410,7 @@ PT *NewPt(CONSOLE *c, wchar_t *cmdline);
 void FreePt(PT *pt);
 void PtMain(PT *pt);
 UINT PtMakeCert(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PtMakeCert2048(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PtTrafficClient(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PtTrafficServer(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PtCheck(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
@@ -419,8 +456,11 @@ UINT PcAccountCompressDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *pa
 UINT PcAccountProxyNone(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountProxyHttp(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountProxySocks(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcAccountProxySocks5(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountServerCertEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountServerCertDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcAccountRetryOnServerCertEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcAccountRetryOnServerCertDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountServerCertSet(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountServerCertDelete(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountServerCertGet(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
@@ -440,6 +480,9 @@ UINT PcAccountExport(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcAccountImport(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcRemoteEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcRemoteDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcTunDownOnDisconnectEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcTunDownOnDisconnectDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PcTunDownOnDisconnectGet(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcKeepEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcKeepDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PcKeepSet(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
@@ -551,6 +594,7 @@ UINT PsCascadeCompressDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *pa
 UINT PsCascadeProxyNone(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PsCascadeProxyHttp(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PsCascadeProxySocks(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
+UINT PsCascadeProxySocks5(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PsCascadeServerCertEnable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PsCascadeServerCertDisable(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 UINT PsCascadeServerCertSet(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
@@ -657,7 +701,3 @@ UINT PsVpnAzureGetStatus(CONSOLE *c, char *cmd_name, wchar_t *str, void *param);
 #endif	// COMMAND_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

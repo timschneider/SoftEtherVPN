@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -130,7 +145,7 @@ typedef struct x509_crl_st X509_CRL;
 #define	BUF_SIZE			512
 
 // Support Windows OS list
-#define	SUPPORTED_WINDOWS_LIST		"Windows 98 / 98 SE / ME / NT 4.0 SP6a / 2000 SP4 / XP SP2, SP3 / Vista SP1, SP2 / 7 SP1 / 8 / 8.1 / Server 2003 SP2 / Server 2008 SP1, SP2 / Hyper-V Server 2008 / Server 2008 R2 SP1 / Hyper-V Server 2008 R2 / Server 2012 / Hyper-V Server 2012 / Server 2012 R2 / Hyper-V Server 2012 R2"
+#define	SUPPORTED_WINDOWS_LIST		"Windows 98 / 98 SE / ME / NT 4.0 SP6a / 2000 SP4 / XP SP2, SP3 / Vista SP1, SP2 / 7 SP1 / 8 / 8.1 / 10 / Server 2003 SP2 / Server 2008 SP1, SP2 / Hyper-V Server 2008 / Server 2008 R2 SP1 / Hyper-V Server 2008 R2 / Server 2012 / Hyper-V Server 2012 / Server 2012 R2 / Hyper-V Server 2012 R2 / Server 2016"
 
 // Infinite
 #ifndef	WINDOWS_H
@@ -212,13 +227,28 @@ typedef int (COMPARE)(void *p1, void *p2);
 #define	GET_ABS(a)			((a) >= 0 ? (a) : -(a))
 
 // Convert the pointer to UINT
-#define	POINTER_TO_KEY(p)		((sizeof(void *) == sizeof(UINT)) ? (UINT)(p) : HashPtrToUINT(p))
+#ifdef	CPU_64
+#define	POINTER_TO_KEY(p)		HashPtrToUINT(p)
+#else
+#define	POINTER_TO_KEY(p)		(UINT)(p)
+#endif
+
 // Compare the pointer and UINT
 #define	COMPARE_POINTER_AND_KEY(p, i)	(POINTER_TO_KEY(p) == (i))
+
 // Convert the pointer to UINT64
-#define	POINTER_TO_UINT64(p)	(((sizeof(void *) == sizeof(UINT64)) ? (UINT64)(p) : (UINT64)((UINT)(p))))
+#ifdef	CPU_64
+#define	POINTER_TO_UINT64(p)	(UINT64)(p)
+#else
+#define	POINTER_TO_UINT64(p)	(UINT64)((UINT)(p))
+#endif
+
 // Convert a UINT64 to pointer
-#define	UINT64_TO_POINTER(i)	((sizeof(void *) == sizeof(UINT64)) ? (void *)(i) : (void *)((UINT)(i)))
+#ifdef	CPU_64
+#define	UINT64_TO_POINTER(i)	(void *)(i)
+#else
+#define	UINT64_TO_POINTER(i)	(void *)((UINT)(i))
+#endif
 
 // Add the value
 #define	UINT_ADD(i, j)		((i == INFINITE || i == 0x7fffffff) ? (i) : (i += j))
@@ -292,6 +322,8 @@ typedef signed char			CHAR;
 typedef	unsigned long long	UINT64;
 typedef signed long long	INT64;
 
+typedef signed long long	time_64t;
+
 #ifdef	OS_UNIX
 // Avoiding compile error
 #define	__cdecl
@@ -337,8 +369,10 @@ typedef UINT_PTR SOCKET;
 #define	OSTYPE_WINDOWS_SERVER_8					2710	// Windows Server 2012
 #define	OSTYPE_WINDOWS_81						2701	// Windows 8.1
 #define	OSTYPE_WINDOWS_SERVER_81				2711	// Windows Server 2012 R2
-#define	OSTYPE_WINDOWS_9						2800	// Windows 9
-#define	OSTYPE_WINDOWS_SERVER_9					2810	// Windows Server 9
+#define	OSTYPE_WINDOWS_10						2702	// Windows 10
+#define	OSTYPE_WINDOWS_SERVER_10				2712	// Windows Server 10
+#define	OSTYPE_WINDOWS_11						2800	// Windows 11 or later
+#define	OSTYPE_WINDOWS_SERVER_11				2810	// Windows Server 11 or later
 #define	OSTYPE_UNIX_UNKNOWN						3000	// Unknown UNIX
 #define	OSTYPE_LINUX							3100	// Linux
 #define	OSTYPE_SOLARIS							3200	// Solaris
@@ -414,6 +448,7 @@ typedef struct STRMAP_ENTRY STRMAP_ENTRY;
 typedef struct SHARED_BUFFER SHARED_BUFFER;
 typedef struct HASH_LIST HASH_LIST;
 typedef struct HASH_ENTRY HASH_ENTRY;
+typedef struct PRAND PRAND;
 
 // Str.h
 typedef struct TOKEN_LIST TOKEN_LIST;
@@ -493,6 +528,7 @@ typedef struct ICMP_RESULT ICMP_RESULT;
 typedef struct SSL_PIPE SSL_PIPE;
 typedef struct SSL_BIO SSL_BIO;
 typedef struct RUDP_STACK RUDP_STACK;
+typedef struct RUDP_SOURCE_IP RUDP_SOURCE_IP;
 typedef struct RUDP_SESSION RUDP_SESSION;
 typedef struct RUDP_SEGMENT RUDP_SEGMENT;
 typedef struct CONNECT_TCP_RUDP_PARAM CONNECT_TCP_RUDP_PARAM;
@@ -511,6 +547,8 @@ typedef struct SAFE_QUOTA2 SAFE_QUOTA2;
 typedef struct SAFE_BLOCK SAFE_BLOCK;
 typedef struct SAFE_REQUEST_LOG SAFE_REQUEST_LOG;
 typedef struct DYN_VALUE DYN_VALUE;
+typedef struct RELAY_PARAMETER RELAY_PARAMETER;
+typedef struct SSL_ACCEPT_SETTINGS SSL_ACCEPT_SETTINGS;
 
 // Tick64.h
 typedef struct ADJUST_TIME ADJUST_TIME;
@@ -573,7 +611,3 @@ typedef struct IKE_HEADER IKE_HEADER;
 
 #endif	// MAYATYPE_H
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

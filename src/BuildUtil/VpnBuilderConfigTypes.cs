@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Build Utility
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -172,27 +187,30 @@ namespace BuildUtil
 	public class BuildSoftware
 	{
 		public Software Software;				// Software
-		public int Version;						// Version number
-		public int BuildNumber;					// Build Number
+		public int VersionMajor;				// Version number (major)
+		public int VersionMinor;				// Version number (minor)
+		public int VersionBuild;				// Version number (build)
 		public string BuildName;				// Build name
 		public Cpu Cpu;							// CPU
 		public OS Os;							// OS
 		public DateTime BuildDate;				// Build date
 
-		public BuildSoftware(Software software, int buildNumber, int version, string buildName, Cpu cpu, OS os)
+		public BuildSoftware(Software software, int versionMajor, int versionMinor, int versionBuild, string buildName, Cpu cpu, OS os)
 		{
 			this.Software = software;
-			this.BuildNumber = buildNumber;
-			this.Version = version;
+			this.VersionMajor = versionMajor;
+			this.VersionMinor = versionMinor;
+			this.VersionBuild = versionBuild;
 			this.BuildName = buildName;
 			this.Cpu = cpu;
 			this.Os = os;
 		}
 
-		public void SetBuildNumberVersionName(int buildNumber, int version, string buildName, DateTime date)
+		public void SetBuildNumberVersionName(int versionMajor, int versionMinor, int versionBuild, string buildName, DateTime date)
 		{
-			this.BuildNumber = buildNumber;
-			this.Version = version;
+			this.VersionMajor = versionMajor;
+			this.VersionMinor = versionMinor;
+			this.VersionBuild = versionBuild;
 			this.BuildName = buildName;
 			this.BuildDate = date;
 		}
@@ -228,8 +246,11 @@ namespace BuildUtil
 			}
 
 			this.Software = (Software)Enum.Parse(typeof(Software), tokens[0], true);
-			this.Version = (int)(double.Parse(tokens[1].Substring(1)) * 100);
-			this.BuildNumber = int.Parse(tokens[2]);
+
+			string[] vs = tokens[1].Substring(1).Split('.');
+			this.VersionMajor = int.Parse(vs[0]);
+			this.VersionMinor = int.Parse(vs[1]);
+			this.VersionBuild = int.Parse(tokens[2]);
 			this.BuildName = tokens[3];
 
 			string[] ds = tokens[4].Split('.');
@@ -245,12 +266,12 @@ namespace BuildUtil
 			{
 				return string.Format("{0}-v{6}-{1}-{2}-{8:D4}.{9:D2}.{10:D2}-{4}-{3}-{7}",
 					Paths.Prefix + this.Software.ToString(),
-					this.BuildNumber,
+					this.VersionBuild,
 					this.BuildName,
 					this.Cpu.Name,
 					this.Os.Name,
 					0,
-					BuildHelper.VersionIntToString(this.Version),
+					BuildHelper.VersionIntToString(this.VersionMajor, this.VersionMinor),
 					CPUBitsUtil.CPUBitsToString(this.Cpu.Bits),
 					BuildDate.Year, BuildDate.Month, BuildDate.Day).ToLower();
 			}
@@ -276,7 +297,7 @@ namespace BuildUtil
 			get
 			{
 				return string.Format("{0} (Ver {2}, Build {1}, {3}) for {5}", BuildHelper.GetSoftwareTitle(this.Software),
-					this.BuildNumber, BuildHelper.VersionIntToString(this.Version), this.Cpu.Title, 0, this.Os.Title);
+					this.VersionBuild, BuildHelper.VersionIntToString(this.VersionMajor, this.VersionMinor), this.Cpu.Title, 0, this.Os.Title);
 			}
 		}
 
@@ -312,7 +333,3 @@ namespace BuildUtil
 		}
 	}
 }
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

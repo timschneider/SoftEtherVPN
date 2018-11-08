@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -100,10 +115,13 @@
 #define	VIRTUAL_H
 
 
+#define	NN_RAW_IP_PORT_START			61001
+#define	NN_RAW_IP_PORT_END				65535
+
 #define	VIRTUAL_TCP_SEND_TIMEOUT		(21 * 1000)
 
-#define	NN_NEXT_WAIT_TIME_FOR_DEVICE_ENUM	(60 * 1000)
-#define	NN_NEXT_WAIT_TIME_MAX_FAIL_COUNT	15
+#define	NN_NEXT_WAIT_TIME_FOR_DEVICE_ENUM	(30 * 1000)
+#define	NN_NEXT_WAIT_TIME_MAX_FAIL_COUNT	30
 
 #define	NN_HOSTNAME_FORMAT				"securenat-%s"
 #define	NN_HOSTNAME_STARTWITH			"securenat-"
@@ -176,6 +194,7 @@ struct NATIVE_NAT
 	LIST *IpCombine;				// IP combining list
 	UINT CurrentIpQuota;			// Current IP combining quota
 	UCHAR CurrentMacAddress[6];		// Current MAC address
+	bool IsRawIpMode;				// Is RAW_IP mode
 };
 
 // ARP entry
@@ -310,6 +329,7 @@ struct NAT_ENTRY
 	UINT64 SendSeq;					// Send sequence number
 	UINT64 RecvSeqInit;				// Initial receive sequence number
 	UINT64 RecvSeq;					// Receive sequence number
+	UINT FinSentSeq;				// Sequence number with the last FIN
 
 	bool CurrentSendingMission;		// Burst transmission ongoing
 	UINT SendMissionSize;			// Transmission size of this time
@@ -320,8 +340,12 @@ struct NAT_ENTRY
 	UINT64 CalcRTTStartValue;		// RTT measurement start value
 
 	bool TcpFinished;				// Data communication end flag of TCP
+	bool TcpDisconnected;			// TCP Disconnect flag
+	bool TcpForceReset;				// TCP connection force reset flag
 	UINT64 FinSentTime;				// Time which the FIN was sent last
 	UINT FinSentCount;				// Number of FIN transmissions
+
+	UINT64 test_TotalSent;
 };
 
 
@@ -570,9 +594,7 @@ void SendTcp(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, UI
 void DnsProxy(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, void *data, UINT size);
 bool ParseDnsPacket(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, void *data, UINT size);
 bool ParseDnsPacketEx(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, void *data, UINT size, DNS_PARSED_PACKET *parsed_result);
-bool ParseDnsQuery(char *name, UINT name_size, void *data, UINT data_size);
 void SetDnsProxyVgsHostname(char *hostname);
-UCHAR GetNextByte(BUF *b);
 bool NatTransactDns(VH *v, NAT_ENTRY *n);
 void NatDnsThread(THREAD *t, void *param);
 bool NatGetIP(IP *ip, char *hostname);
@@ -598,6 +620,7 @@ DHCP_LEASE *SearchDhcpLeaseByMac(VH *v, UCHAR *mac);
 DHCP_LEASE *SearchDhcpLeaseByIp(VH *v, UINT ip);
 UINT ServeDhcpDiscover(VH *v, UCHAR *mac, UINT request_ip);
 UINT GetFreeDhcpIpAddress(VH *v);
+UINT GetFreeDhcpIpAddressByRandom(VH *v, UCHAR *mac);
 UINT ServeDhcpRequest(VH *v, UCHAR *mac, UINT request_ip);
 void VirtualDhcpSend(VH *v, UINT tran_id, UINT dest_ip, UINT dest_port,
 					 UINT new_ip, UCHAR *client_mac, BUF *b, UINT hw_type, UINT hw_addr_size);
@@ -622,7 +645,7 @@ BUF *NnBuildDnsQueryPacket(char *hostname, USHORT tran_id);
 BUF *NnBuildUdpPacket(BUF *payload, UINT src_ip, USHORT src_port, UINT dst_ip, USHORT dst_port);
 BUF *NnBuildTcpPacket(BUF *payload, UINT src_ip, USHORT src_port, UINT dst_ip, USHORT dst_port, UINT seq, UINT ack, UINT flag, UINT window_size, UINT mss);
 BUF *NnBuildIpPacket(BUF *payload, UINT src_ip, UINT dst_ip, UCHAR protocol, UCHAR ttl);
-UINT NnGenSrcPort();
+UINT NnGenSrcPort(bool raw_ip_mode);
 bool NnParseDnsResponsePacket(UCHAR *data, UINT size, IP *ret_ip);
 BUF *NnReadDnsRecord(BUF *buf, bool answer, USHORT *ret_type, USHORT *ret_class);
 bool NnReadDnsLabel(BUF *buf);
@@ -635,6 +658,7 @@ UINT GetHashNativeNatTableForRecv(void *p);
 void NnSetNat(NATIVE_NAT_ENTRY *e, UINT protocol, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, UINT pub_ip, UINT pub_port);
 
 bool NnIsActive(VH *v);
+bool NnIsActiveEx(VH *v, bool *is_ipraw_mode);
 void NnUdpRecvForInternet(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, void *data, UINT size, UINT max_l3_size);
 void NnTcpRecvForInternet(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT dest_port, TCP_HEADER *old_tcp, void *data, UINT size, UINT max_l3_size);
 void NnIcmpEchoRecvForInternet(VH *v, UINT src_ip, UINT dest_ip, void *data, UINT size, UCHAR ttl, void *icmp_data, UINT icmp_size, UCHAR *ip_header, UINT ip_header_size, UINT max_l3_size);
@@ -672,7 +696,3 @@ void NnSetSecureNatTargetHostname(char *name);
 #endif	// VIRTUAL_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

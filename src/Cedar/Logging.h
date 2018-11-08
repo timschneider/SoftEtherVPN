@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -104,7 +119,7 @@
 #define	LOG_HTTP_PORT						80
 
 
-#define	MAX_LOG_SIZE						1073741823ULL
+#define	MAX_LOG_SIZE_DEFAULT				1073741823ULL
 
 typedef char *(RECORD_PARSE_PROC)(RECORD *rec);
 
@@ -115,6 +130,9 @@ struct PACKET_LOG
 	struct PKT *Packet;
 	char *SrcSessionName;
 	char *DestSessionName;
+	bool WritePhysicalIP;
+	char SrcPhysicalIP[64];
+	char DestPhysicalIP[64];
 	bool PurePacket;						// Packet not cloned
 	bool PurePacketNoPayload;				// Packet not cloned (without payload)
 	SESSION *SrcSession;
@@ -156,7 +174,6 @@ struct LOG
 	UINT LastSwitchType;
 	char LastStr[MAX_SIZE];
 	UINT64 CurrentFilePointer;				// The current file pointer
-	UINT64 MaxLogFileSize;					// Maximum log file size
 	UINT CurrentLogNumber;					// Log file number of the current
 	bool log_number_incremented;
 };
@@ -206,8 +223,6 @@ char *StringRecordParseProc(RECORD *rec);
 bool MakeLogFileName(LOG *g, char *name, UINT size, char *dir, char *prefix, UINT64 tick, UINT switch_type, UINT num, char *old_datestr);
 void MakeLogFileNameStringFromTick(LOG *g, char *str, UINT size, UINT64 tick, UINT switch_type);
 void WriteRecordToBuffer(BUF *b, RECORD *r);
-void SetLogDirName(LOG *g, char *dir);
-void SetLogPrefix(LOG *g, char *prefix);
 void SetLogSwitchType(LOG *g, UINT switch_type);
 bool PacketLog(HUB *hub, SESSION *src_session, SESSION *dest_session, PKT *packet, UINT64 now);
 char *PacketLogParseProc(RECORD *rec);
@@ -217,17 +232,12 @@ char *GenCsvLine(TOKEN_LIST *t);
 void ReplaceForCsv(char *str);
 char *PortStr(CEDAR *cedar, UINT port, bool udp);
 char *TcpFlagStr(UCHAR flag);
-void WriteSecurityLog(HUB *h, char *str);
-void SecLog(HUB *h, char *fmt, ...);
 void SiSetDefaultLogSetting(HUB_LOG *g);
 void DebugLog(CEDAR *c, char *fmt, ...);
-void HubLog(HUB *h, wchar_t *fmt, ...);
-void ServerLog(CEDAR *c, wchar_t *fmt, ...);
 void SLog(CEDAR *c, char *name, ...);
 void WriteHubLog(HUB *h, wchar_t *str);
 void HLog(HUB *h, char *name, ...);
 void NLog(VH *v, char *name, ...);
-void IPCLog(IPC *ipc, char *name, ...);
 void PPPLog(PPP_SESSION *p, char *name, ...);
 void IPsecLog(IKE_SERVER *ike, IKE_CLIENT *c, IKE_SA *ike_sa, IPSECSA *ipsec_sa, char *name, ...);
 void EtherIPLog(ETHERIP_SERVER *s, char *name, ...);
@@ -244,20 +254,18 @@ bool CheckEraserDiskFreeSpace(ERASER *e);
 int CompareEraseFile(void *p1, void *p2);
 LIST *GenerateEraseFileList(ERASER *e);
 void FreeEraseFileList(LIST *o);
-void PrintEraseFileList(LIST *o);
 void EnumEraseFile(LIST *o, char *dirname);
-SLOG *NewSysLog(char *hostname, UINT port);
+SLOG *NewSysLog(char *hostname, UINT port, IP *ip);
 void SetSysLog(SLOG *g, char *hostname, UINT port);
 void FreeSysLog(SLOG *g);
 void SendSysLog(SLOG *g, wchar_t *str);
-void WriteMultiLineLog(LOG *g, BUF *b);
 char *BuildHttpLogStr(HTTPLOG *h);
 void MakeSafeLogStr(char *str);
 void AddLogBufToStr(BUF *b, char *name, char *value);
+void SetEraserCheckInterval(UINT interval);
+UINT GetEraserCheckInterval();
+void SetMaxLogSize(UINT64 size);
+UINT64 GetMaxLogSize();
 
 #endif	// LOGGING_G
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

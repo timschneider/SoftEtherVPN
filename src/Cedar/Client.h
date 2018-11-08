@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -155,6 +170,7 @@ struct ACCOUNT
 	CLIENT_OPTION *ClientOption;			// Client Option
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool CheckServerCert;					// Check the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	bool StartupAccount;					// Start-up account
 	UCHAR ShortcutKey[SHA1_SIZE];			// Key
@@ -180,6 +196,7 @@ struct CLIENT_CONFIG
 	UINT KeepConnectProtocol;				// Protocol
 	UINT KeepConnectInterval;				// Interval
 	bool NoChangeWcmNetworkSettingOnWindows8;	// Don't change the WCM network settings on Windows 8
+	bool NicDownOnDisconnect;				// Put NIC down on disconnect/connection loss and put it up again after connecting to VPN server
 };
 
 // Version acquisition
@@ -332,6 +349,7 @@ struct RPC_CLIENT_CREATE_ACCOUNT
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool StartupAccount;					// Startup account
 	bool CheckServerCert;					// Checking of the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	UCHAR ShortcutKey[SHA1_SIZE];			// Shortcut Key
 };
@@ -384,6 +402,7 @@ struct RPC_CLIENT_GET_ACCOUNT
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool StartupAccount;					// Startup account
 	bool CheckServerCert;					// Check the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	UCHAR ShortcutKey[SHA1_SIZE];			// Shortcut Key
 	UINT64 CreateDateTime;					// Creation date and time (Ver 3.0 or later)
@@ -412,9 +431,9 @@ struct RPC_CLIENT_GET_CONNECTION_STATUS
 	X *ServerX;								// Server certificate
 	X *ClientX;								// Client certificate
 	UINT64 StartTime;						// Connection start time
-	UINT64 FirstConnectionEstablisiedTime;	// Connection completion time of the first connection
+	UINT64 FirstConnectionEstablishedTime;	// Connection completion time of the first connection
 	UINT64 CurrentConnectionEstablishTime;	// Connection completion time of this connection
-	UINT NumConnectionsEatablished;			// Number of connections have been established so far
+	UINT NumConnectionsEstablished;			// Number of connections have been established so far
 	bool HalfConnection;					// Half-connection
 	bool QoS;								// VoIP / QoS
 	UINT MaxTcpConnections;					// Maximum number of the TCP connections
@@ -488,6 +507,7 @@ struct CLIENT
 	bool NoSaveLog;							// Do not save the log
 	bool NoSaveConfig;						// Do not save the settings
 	INTERNET_SETTING CommonProxySetting;	// Common proxy settings
+	void *MsSuspendHandler;					// MS suspend handler
 
 };
 
@@ -554,7 +574,6 @@ UINT CcGetCa(REMOTE_CLIENT *r, RPC_GET_CA *get);
 UINT CcEnumSecure(REMOTE_CLIENT *r, RPC_CLIENT_ENUM_SECURE *e);
 UINT CcUseSecure(REMOTE_CLIENT *r, RPC_USE_SECURE *sec);
 UINT CcGetUseSecure(REMOTE_CLIENT *r, RPC_USE_SECURE *sec);
-UINT CcEnumObjectInSecure(REMOTE_CLIENT *r, RPC_ENUM_OBJECT_IN_SECURE *e);
 UINT CcCreateVLan(REMOTE_CLIENT *r, RPC_CLIENT_CREATE_VLAN *create);
 UINT CcUpgradeVLan(REMOTE_CLIENT *r, RPC_CLIENT_CREATE_VLAN *create);
 UINT CcGetVLan(REMOTE_CLIENT *r, RPC_CLIENT_GET_VLAN *get);
@@ -577,16 +596,11 @@ UINT CcGetAccountStatus(REMOTE_CLIENT *r, RPC_CLIENT_GET_CONNECTION_STATUS *st);
 UINT CcSetStartupAccount(REMOTE_CLIENT *r, RPC_CLIENT_DELETE_ACCOUNT *a);
 UINT CcRemoveStartupAccount(REMOTE_CLIENT *r, RPC_CLIENT_DELETE_ACCOUNT *a);
 UINT CcGetIssuer(REMOTE_CLIENT *r, RPC_GET_ISSUER *a);
-UINT CcGetCommonProxySetting(REMOTE_CLIENT *r, INTERNET_SETTING *a);
-UINT CcSetCommonProxySetting(REMOTE_CLIENT *r, INTERNET_SETTING *a);
 
 
 void CcSetServiceToForegroundProcess(REMOTE_CLIENT *r);
 char *CiGetFirstVLan(CLIENT *c);
 void CiNormalizeAccountVLan(CLIENT *c);
-
-bool CompareInternetSetting(INTERNET_SETTING *s1, INTERNET_SETTING *s2);
-
 
 void CnStart();
 void CnListenerProc(THREAD *thread, void *param);
@@ -629,7 +643,6 @@ SOCK *CncConnect();
 SOCK *CncConnectEx(UINT timeout);
 void CncReleaseSocket();
 void CncExit();
-UINT CncGetSessionId();
 bool CncExecDriverInstaller(char *arg);
 SOCK *CncStatusPrinterWindowStart(SESSION *s);
 void CncStatusPrinterWindowPrint(SOCK *s, wchar_t *str);
@@ -638,7 +651,6 @@ void CncStatusPrinterWindowThreadProc(THREAD *thread, void *param);
 bool CncConnectErrorDlg(SESSION *session, UI_CONNECTERROR_DLG *dlg);
 void CncConnectErrorDlgHaltThread(THREAD *thread, void *param);
 bool CncPasswordDlg(SESSION *session, UI_PASSWORD_DLG *dlg);
-void CncPasswordDlgHaltThread(THREAD *thread, void *param);
 void CncCheckCert(SESSION *session, UI_CHECKCERT *dlg);
 void CncCheckCertHaltThread(THREAD *thread, void *param);
 bool CncSecureSignDlg(SECURE_SIGN *sign);
@@ -649,7 +661,6 @@ void CncNicInfoFree(SOCK *s);
 
 void CtStartClient();
 void CtStopClient();
-CLIENT *CtGetClient();
 void CtReleaseClient(CLIENT *c);
 bool CtGetClientVersion(CLIENT *c, RPC_CLIENT_VERSION *ver);
 bool CtGetCmSetting(CLIENT *c, CM_SETTING *s);
@@ -780,13 +791,9 @@ bool CiTryToParseAccount(BUF *b);
 bool CiTryToParseAccountFile(wchar_t *name);
 bool CiEraseSensitiveInAccount(BUF *b);
 bool CiHasAccountSensitiveInformation(BUF *b);
-bool CiHasAccountSensitiveInformationFile(wchar_t *name);
 void CiApplyInnerVPNServerConfig(CLIENT *c);
-SERVER *CiNewInnerVPNServer(CLIENT *c);
-void CiFreeInnerVPNServer(CLIENT *c, SERVER *s);
 void CiIncrementNumActiveSessions();
 void CiDecrementNumActiveSessions();
-UINT CiGetNumActiveSessions();
 
 BUF *EncryptPassword(char *password);
 BUF *EncryptPassword2(char *password);
@@ -811,7 +818,6 @@ void InRpcClientEnumSecure(RPC_CLIENT_ENUM_SECURE *e, PACK *p);
 void OutRpcClientEnumSecure(PACK *p, RPC_CLIENT_ENUM_SECURE *e);
 void InRpcUseSecure(RPC_USE_SECURE *u, PACK *p);
 void OutRpcUseSecure(PACK *p, RPC_USE_SECURE *u);
-void InRpcEnumObjectInSecure(RPC_ENUM_OBJECT_IN_SECURE *e, PACK *p);
 void OutRpcEnumObjectInSecure(PACK *p, RPC_ENUM_OBJECT_IN_SECURE *e);
 void InRpcCreateVLan(RPC_CLIENT_CREATE_VLAN *v, PACK *p);
 void OutRpcCreateVLan(PACK *p, RPC_CLIENT_CREATE_VLAN *v);
@@ -841,8 +847,6 @@ void InRpcPolicy(POLICY *o, PACK *p);
 void OutRpcPolicy(PACK *p, POLICY *o);
 void InRpcClientGetConnectionStatus(RPC_CLIENT_GET_CONNECTION_STATUS *s, PACK *p);
 void OutRpcClientGetConnectionStatus(PACK *p, RPC_CLIENT_GET_CONNECTION_STATUS *c);
-void InRpcClientNotify(RPC_CLIENT_NOTIFY *n, PACK *p);
-void OutRpcClientNotify(PACK *p, RPC_CLIENT_NOTIFY *n);
 void InRpcClientConfig(CLIENT_CONFIG *c, PACK *p);
 void OutRpcClientConfig(PACK *p, CLIENT_CONFIG *c);
 void InRpcClientPasswordSetting(RPC_CLIENT_PASSWORD_SETTING *a, PACK *p);
@@ -862,7 +866,3 @@ void CiInitDriverVerStruct(MS_DRIVER_VER *ver);
 #endif	// CLIENT_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

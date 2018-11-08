@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -143,10 +158,19 @@ PACK *WpcCall(char *url, INTERNET_SETTING *setting, UINT timeout_connect, UINT t
 			  char *function_name, PACK *pack, X *cert, K *key, void *sha1_cert_hash)
 {
 	return WpcCallEx(url, setting, timeout_connect, timeout_comm, function_name, pack, cert, key,
-		sha1_cert_hash, NULL, 0);
+		sha1_cert_hash, NULL, 0, NULL, NULL);
 }
 PACK *WpcCallEx(char *url, INTERNET_SETTING *setting, UINT timeout_connect, UINT timeout_comm,
-				char *function_name, PACK *pack, X *cert, K *key, void *sha1_cert_hash, bool *cancel, UINT max_recv_size)
+				char *function_name, PACK *pack, X *cert, K *key, void *sha1_cert_hash, bool *cancel, UINT max_recv_size,
+				char *additional_header_name, char *additional_header_value)
+{
+	return WpcCallEx2(url, setting, timeout_connect, timeout_comm, function_name, pack,
+		cert, key, sha1_cert_hash, (sha1_cert_hash == NULL ? 0 : 1),
+		cancel, max_recv_size, additional_header_name, additional_header_value, NULL);
+}
+PACK *WpcCallEx2(char *url, INTERNET_SETTING *setting, UINT timeout_connect, UINT timeout_comm,
+				char *function_name, PACK *pack, X *cert, K *key, void *sha1_cert_hash, UINT num_hashes, bool *cancel, UINT max_recv_size,
+				char *additional_header_name, char *additional_header_value, char *sni_string)
 {
 	URL_DATA data;
 	BUF *b, *recv;
@@ -175,8 +199,20 @@ PACK *WpcCallEx(char *url, INTERNET_SETTING *setting, UINT timeout_connect, UINT
 	WriteBufInt(b, 0);
 	SeekBuf(b, 0, 0);
 
-	recv = HttpRequestEx(&data, setting, timeout_connect, timeout_comm, &error,
-		false, b->Buf, NULL, NULL, sha1_cert_hash, cancel, max_recv_size);
+	if (IsEmptyStr(additional_header_name) == false && IsEmptyStr(additional_header_value) == false)
+	{
+		StrCpy(data.AdditionalHeaderName, sizeof(data.AdditionalHeaderName), additional_header_name);
+		StrCpy(data.AdditionalHeaderValue, sizeof(data.AdditionalHeaderValue), additional_header_value);
+	}
+
+	if (sni_string != NULL && IsEmptyStr(sni_string) == false)
+	{
+		StrCpy(data.SniString, sizeof(data.SniString), sni_string);
+	}
+
+	recv = HttpRequestEx3(&data, setting, timeout_connect, timeout_comm, &error,
+		false, b->Buf, NULL, NULL, sha1_cert_hash, num_hashes, cancel, max_recv_size,
+		NULL, NULL);
 
 	FreeBuf(b);
 
@@ -231,7 +267,7 @@ bool WpcParsePacket(WPC_PACKET *packet, BUF *buf)
 	b = WpcDataEntryToBuf(WpcFindDataEntry(o, "PACK"));
 	if (b != NULL)
 	{
-		HashSha1(hash, b->Buf, b->Size);
+		Sha1(hash, b->Buf, b->Size);
 
 		packet->Pack = BufToPack(b);
 		FreeBuf(b);
@@ -326,7 +362,7 @@ BUF *WpcGeneratePacket(PACK *pack, X *cert, K *key)
 	}
 
 	pack_data = PackToBuf(pack);
-	HashSha1(hash, pack_data->Buf, pack_data->Size);
+	Sha1(hash, pack_data->Buf, pack_data->Size);
 
 	if (cert != NULL && key != NULL)
 	{
@@ -587,7 +623,7 @@ SOCK *WpcSockConnectEx(WPC_CONNECT *param, UINT *error_code, UINT timeout, bool 
 	switch (param->ProxyType)
 	{
 	case PROXY_DIRECT:
-		sock = TcpConnectEx3(param->HostName, param->Port, timeout, cancel, NULL, true, NULL, false, false);
+		sock = TcpConnectEx3(param->HostName, param->Port, timeout, cancel, NULL, true, NULL, false, NULL);
 		if (sock == NULL)
 		{
 			err = ERR_CONNECT_FAILED;
@@ -605,14 +641,23 @@ SOCK *WpcSockConnectEx(WPC_CONNECT *param, UINT *error_code, UINT timeout, bool 
 		break;
 
 	case PROXY_SOCKS:
+		// SOCKS4 connection
 		sock = SocksConnectEx2(&c, param->ProxyHostName, param->ProxyPort,
 			param->HostName, param->Port,
-			param->ProxyUsername, false, cancel, NULL, timeout);
+			param->ProxyUsername, false, cancel, NULL, timeout, NULL);
 		if (sock == NULL)
 		{
 			err = c.Err;
 		}
 		break;
+
+	case PROXY_SOCKS5:
+		// SOCKS5 connection
+		sock = Socks5Connect(&c, param, false, cancel, NULL, timeout, NULL);
+		if (sock == NULL)
+		{
+			err = c.Err;
+		}
 	}
 
 	if (error_code != NULL)
@@ -672,6 +717,16 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 				   WPC_RECV_CALLBACK *recv_callback, void *recv_callback_param, void *sha1_cert_hash,
 				   bool *cancel, UINT max_recv_size, char *header_name, char *header_value)
 {
+	return HttpRequestEx3(data, setting, timeout_connect, timeout_comm, error_code, check_ssl_trust,
+		post_data, recv_callback, recv_callback_param, sha1_cert_hash, (sha1_cert_hash == NULL ? 0 : 1),
+		cancel, max_recv_size, header_name, header_value);
+}
+BUF *HttpRequestEx3(URL_DATA *data, INTERNET_SETTING *setting,
+					UINT timeout_connect, UINT timeout_comm,
+					UINT *error_code, bool check_ssl_trust, char *post_data,
+					WPC_RECV_CALLBACK *recv_callback, void *recv_callback_param, void *sha1_cert_hash, UINT num_hashes,
+					bool *cancel, UINT max_recv_size, char *header_name, char *header_value)
+{
 	WPC_CONNECT con;
 	SOCK *s;
 	HTTP_HEADER *h;
@@ -706,6 +761,14 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 	{
 		timeout_comm = WPC_TIMEOUT;
 	}
+	if (sha1_cert_hash == NULL)
+	{
+		num_hashes = 0;
+	}
+	if (num_hashes == 0)
+	{
+		sha1_cert_hash = NULL;
+	}
 
 	// Connection
 	Zero(&con, sizeof(con));
@@ -736,7 +799,7 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 	else
 	{
 		// If the connection is not SSL via HTTP Proxy
-		s = TcpConnectEx3(con.ProxyHostName, con.ProxyPort, timeout_connect, cancel, NULL, true, NULL, false, false);
+		s = TcpConnectEx3(con.ProxyHostName, con.ProxyPort, timeout_connect, cancel, NULL, true, NULL, false, NULL);
 		if (s == NULL)
 		{
 			*error_code = ERR_PROXY_CONNECT_FAILED;
@@ -751,7 +814,7 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 	if (data->Secure)
 	{
 		// Start the SSL communication
-		if (StartSSLEx(s, NULL, NULL, true, 0, NULL) == false)
+		if (StartSSLEx(s, NULL, NULL, 0, (IsEmptyStr(data->SniString) ? NULL : data->SniString)) == false)
 		{
 			// SSL connection failed
 			*error_code = ERR_PROTOCOL_ERROR;
@@ -760,13 +823,28 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 			return NULL;
 		}
 
-		if (sha1_cert_hash != NULL)
+		if (sha1_cert_hash != NULL && num_hashes >= 1)
 		{
 			UCHAR hash[SHA1_SIZE];
+			UINT i;
+			bool ok = false;
+
 			Zero(hash, sizeof(hash));
 			GetXDigest(s->RemoteX, hash, true);
 
-			if (Cmp(hash, sha1_cert_hash, SHA1_SIZE) != 0)
+			for (i = 0;i < num_hashes;i++)
+			{
+				UCHAR *a = (UCHAR *)sha1_cert_hash;
+				a += (SHA1_SIZE * i);
+
+				if (Cmp(hash, a, SHA1_SIZE) == 0)
+				{
+					ok = true;
+					break;
+				}
+			}
+
+			if (ok == false)
 			{
 				// Destination certificate hash mismatch
 				*error_code = ERR_CERT_NOT_TRUSTED;
@@ -805,6 +883,11 @@ BUF *HttpRequestEx2(URL_DATA *data, INTERNET_SETTING *setting,
 		ToStr(len_str, StrLen(post_data));
 		AddHttpValue(h, NewHttpValue("Content-Type", "application/x-www-form-urlencoded"));
 		AddHttpValue(h, NewHttpValue("Content-Length", len_str));
+	}
+
+	if (IsEmptyStr(data->AdditionalHeaderName) == false && IsEmptyStr(data->AdditionalHeaderValue) == false)
+	{
+		AddHttpValue(h, NewHttpValue(data->AdditionalHeaderName, data->AdditionalHeaderValue));
 	}
 
 	if (use_http_proxy)
@@ -1335,7 +1418,3 @@ void EncodeSafe64(char *dst, void *src, UINT src_size)
 	Base64ToSafe64(dst);
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

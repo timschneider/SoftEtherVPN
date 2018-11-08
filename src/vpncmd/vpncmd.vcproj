@@ -46,7 +46,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="$(SolutionDir)Mayaqua\win32_inc;.;$(SolutionDir)"
-				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;_USE_32BIT_TIME_T"
+				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
 				StringPooling="false"
 				MinimalRebuild="true"
 				ExceptionHandling="0"
@@ -64,6 +64,7 @@
 			/>
 			<Tool
 				Name="VCResourceCompilerTool"
+				AdditionalIncludeDirectories="C:\WinDDK\7600.16385.1\inc\mfc42;$(IntDir)"
 			/>
 			<Tool
 				Name="VCPreLinkEventTool"
@@ -81,7 +82,6 @@
 				GenerateMapFile="true"
 				MapFileName="$(SolutionDir)DebugFiles\map\$(PlatformName)_$(ConfigurationName)\$(ProjectName).map"
 				SubSystem="1"
-				StackReserveSize="100000"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -154,6 +154,7 @@
 			/>
 			<Tool
 				Name="VCResourceCompilerTool"
+				AdditionalIncludeDirectories="C:\WinDDK\7600.16385.1\inc\mfc42;$(IntDir)"
 			/>
 			<Tool
 				Name="VCPreLinkEventTool"
@@ -171,7 +172,6 @@
 				GenerateMapFile="true"
 				MapFileName="$(SolutionDir)DebugFiles\map\$(PlatformName)_$(ConfigurationName)\$(ProjectName).map"
 				SubSystem="1"
-				StackReserveSize="100000"
 				TargetMachine="17"
 			/>
 			<Tool
@@ -228,7 +228,7 @@
 				EnableIntrinsicFunctions="false"
 				FavorSizeOrSpeed="0"
 				AdditionalIncludeDirectories="$(SolutionDir)Mayaqua\win32_inc;.;$(SolutionDir)"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_USE_32BIT_TIME_T;VPN_SPEED"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;VPN_SPEED"
 				StringPooling="false"
 				MinimalRebuild="false"
 				ExceptionHandling="0"
@@ -247,6 +247,7 @@
 			/>
 			<Tool
 				Name="VCResourceCompilerTool"
+				AdditionalIncludeDirectories="C:\WinDDK\7600.16385.1\inc\mfc42;$(IntDir)"
 			/>
 			<Tool
 				Name="VCPreLinkEventTool"
@@ -266,7 +267,6 @@
 				GenerateMapFile="true"
 				MapFileName="$(SolutionDir)DebugFiles\map\$(PlatformName)_$(ConfigurationName)\$(ProjectName).map"
 				SubSystem="1"
-				StackReserveSize="100000"
 				OptimizeReferences="1"
 				EnableCOMDATFolding="1"
 				TargetMachine="1"
@@ -345,6 +345,7 @@
 			/>
 			<Tool
 				Name="VCResourceCompilerTool"
+				AdditionalIncludeDirectories="C:\WinDDK\7600.16385.1\inc\mfc42;$(IntDir)"
 			/>
 			<Tool
 				Name="VCPreLinkEventTool"
@@ -364,7 +365,6 @@
 				GenerateMapFile="true"
 				MapFileName="$(SolutionDir)DebugFiles\map\$(PlatformName)_$(ConfigurationName)\$(ProjectName).map"
 				SubSystem="1"
-				StackReserveSize="100000"
 				OptimizeReferences="1"
 				EnableCOMDATFolding="1"
 				TargetMachine="17"

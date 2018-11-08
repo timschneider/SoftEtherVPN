@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -409,12 +424,18 @@ bool SignSecByObject(SECURE *sec, SEC_OBJ *obj, void *dst, void *src, UINT size)
 
 	// Perform Signing
 	size = 128;
+	// First try with 1024 bit
 	ret = sec->Api->C_Sign(sec->SessionId, hash, sizeof(hash), dst, &size);
-	if (ret != CKR_OK || size != 128)
+	if (ret != CKR_OK && 128 < size && size <= 4096/8)
+	{
+		// Retry with expanded bits
+		ret = sec->Api->C_Sign(sec->SessionId, hash, sizeof(hash), dst, &size);
+	}
+	if (ret != CKR_OK || size == 0 || size > 4096/8)
 	{
 		// Failure
 		sec->Error = SEC_ERROR_HARDWARE_ERROR;
-		Debug("C_Sign Error: 0x%x\n", ret);
+		Debug("C_Sign Error: 0x%x  size:%d\n", ret, size);
 		return false;
 	}
 
@@ -466,6 +487,8 @@ bool WriteSecKey(SECURE *sec, bool private_obj, char *name, K *k)
 	BUF *b;
 	RSA *rsa;
 	UCHAR modules[MAX_SIZE], pub[MAX_SIZE], pri[MAX_SIZE], prime1[MAX_SIZE], prime2[MAX_SIZE];
+	UCHAR exp1[MAX_SIZE], exp2[MAX_SIZE], coeff[MAX_SIZE];
+	const BIGNUM *n, *e, *d, *p, *q, *dmp1, *dmq1, *iqmp;
 	CK_ATTRIBUTE a[] =
 	{
 		{CKA_MODULUS,			modules,		0},		// 0
@@ -473,6 +496,10 @@ bool WriteSecKey(SECURE *sec, bool private_obj, char *name, K *k)
 		{CKA_PRIVATE_EXPONENT,	pri,			0},		// 2
 		{CKA_PRIME_1,			prime1,			0},		// 3
 		{CKA_PRIME_2,			prime2,			0},		// 4
+		{CKA_EXPONENT_1,		exp1,			0},		// 5
+		{CKA_EXPONENT_2,		exp2,			0},		// 6
+		{CKA_COEFFICIENT,		coeff,			0},		// 7
+
 		{CKA_CLASS,				&obj_class,		sizeof(obj_class)},
 		{CKA_TOKEN,				&b_true,		sizeof(b_true)},
 		{CKA_PRIVATE,			&b_private_obj,	sizeof(b_private_obj)},
@@ -487,6 +514,7 @@ bool WriteSecKey(SECURE *sec, bool private_obj, char *name, K *k)
 		{CKA_EXTRACTABLE,		&b_false,		sizeof(b_false)},
 		{CKA_MODIFIABLE,		&b_false,		sizeof(b_false)},
 	};
+
 	// Validate arguments
 	if (sec == NULL)
 	{
@@ -509,35 +537,66 @@ bool WriteSecKey(SECURE *sec, bool private_obj, char *name, K *k)
 	}
 
 	// Numeric data generation
-	rsa = k->pkey->pkey.rsa;
+	rsa = EVP_PKEY_get0_RSA(k->pkey);
 	if (rsa == NULL)
 	{
 		sec->Error = SEC_ERROR_BAD_PARAMETER;
 		return false;
 	}
-	b = BigNumToBuf(rsa->n);
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	RSA_get0_key(rsa, &n, &e, &d);
+	RSA_get0_factors(rsa, &p, &q);
+	RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
+#else
+	n = rsa->n;
+	e = rsa->e;
+	d = rsa->d;
+	p = rsa->p;
+	q = rsa->q;
+	dmp1 = rsa->dmp1;
+	dmq1 = rsa->dmq1;
+	iqmp = rsa->iqmp;
+#endif
+
+	b = BigNumToBuf(n);
 	ReadBuf(b, modules, sizeof(modules));
 	A_SIZE(a, 0) = b->Size;
 	FreeBuf(b);
 
-	b = BigNumToBuf(rsa->e);
+	b = BigNumToBuf(e);
 	ReadBuf(b, pub, sizeof(pub));
 	A_SIZE(a, 1) = b->Size;
 	FreeBuf(b);
 
-	b = BigNumToBuf(rsa->d);
+	b = BigNumToBuf(d);
 	ReadBuf(b, pri, sizeof(pri));
 	A_SIZE(a, 2) = b->Size;
 	FreeBuf(b);
 
-	b = BigNumToBuf(rsa->p);
+	b = BigNumToBuf(p);
 	ReadBuf(b, prime1, sizeof(prime1));
 	A_SIZE(a, 3) = b->Size;
 	FreeBuf(b);
 
-	b = BigNumToBuf(rsa->q);
+	b = BigNumToBuf(q);
 	ReadBuf(b, prime2, sizeof(prime2));
 	A_SIZE(a, 4) = b->Size;
+	FreeBuf(b);
+
+	b = BigNumToBuf(dmp1);
+	ReadBuf(b, exp1, sizeof(exp1));
+	A_SIZE(a, 5) = b->Size;
+	FreeBuf(b);
+
+	b = BigNumToBuf(dmq1);
+	ReadBuf(b, exp2, sizeof(exp2));
+	A_SIZE(a, 6) = b->Size;
+	FreeBuf(b);
+
+	b = BigNumToBuf(iqmp);
+	ReadBuf(b, coeff, sizeof(coeff));
+	A_SIZE(a, 7) = b->Size;
 	FreeBuf(b);
 
 	// Delete the old key if it exists
@@ -739,6 +798,12 @@ bool WriteSecCert(SECURE *sec, bool private_obj, char *name, X *x)
 	// Expiration date information
 	UINT64ToCkDate(&start_date, SystemToLocal64(x->notBefore));
 	UINT64ToCkDate(&end_date, SystemToLocal64(x->notAfter));
+
+	// Workaround for Gemalto PKCS#11 API. It rejects a private certificate.
+	if(sec->Dev->Id == 18 || sec->Dev->Id == 19)
+	{
+		b_private_obj = false;
+	}
 
 	// Remove objects which have the same name
 	if (CheckSecObject(sec, name, SEC_X))
@@ -1386,25 +1451,6 @@ bool WriteSecData(SECURE *sec, bool private_obj, char *name, void *data, UINT si
 	return true;
 }
 
-// Add the information of the newly created object to the cache
-void AddSecObjToEnumCache(SECURE *sec, char *name, UINT type, bool private_obj, UINT object)
-{
-	SEC_OBJ *obj;
-	// Validate arguments
-	if (sec == NULL || name == NULL || sec->EnumCache == NULL)
-	{
-		return;
-	}
-
-	obj = ZeroMalloc(sizeof(SEC_OBJ));
-	obj->Name = CopyStr(name);
-	obj->Object = object;
-	obj->Private = private_obj;
-	obj->Type = type;
-
-	Add(sec->EnumCache, obj);
-}
-
 // Display the token information
 void PrintSecInfo(SECURE *sec)
 {
@@ -1778,7 +1824,7 @@ SECURE *OpenSec(UINT id)
 		return NULL;
 	}
 
-	sec->SlotIdList = (UINT *)ZeroMalloc(sizeof(UINT *) * sec->NumSlot);
+	sec->SlotIdList = (UINT *)ZeroMalloc(sizeof(UINT) * sec->NumSlot);
 
 	if (sec->Api->C_GetSlotList(TRUE, sec->SlotIdList, &sec->NumSlot) != CKR_OK)
 	{
@@ -1965,7 +2011,7 @@ void TestSecMain(SECURE *sec)
 	}
 
 	Print("Generating Key...\n");
-	if (RsaGen(&private_key, &public_key, 1024) == false)
+	if (RsaGen(&private_key, &public_key, 2048) == false)
 	{
 		Print("RsaGen() Failed.\n");
 	}
@@ -2029,15 +2075,16 @@ void TestSecMain(SECURE *sec)
 						Print("Ok.\n");
 						Print("Writing Private Key...\n");
 						DeleteSecKey(sec, "test_key");
-						if (WriteSecKey(sec, true, "test_key", private_key) == false)
+						if (WriteSecKey(sec, false, "test_key", private_key) == false)
 						{
 							Print("WriteSecKey() Failed.\n");
 						}
 						else
 						{
-							UCHAR sign_cpu[128];
-							UCHAR sign_sec[128];
+							UCHAR sign_cpu[512];
+							UCHAR sign_sec[512];
 							K *pub = GetKFromX(cert);
+							UINT keybytes = (cert->bits)/8;
 							Print("Ok.\n");
 							Print("Signing Data by CPU...\n");
 							if (RsaSign(sign_cpu, test_str, StrLen(test_str), private_key) == false)
@@ -2048,7 +2095,7 @@ void TestSecMain(SECURE *sec)
 							{
 								Print("Ok.\n");
 								Print("sign_cpu: ");
-								PrintBin(sign_cpu, sizeof(sign_cpu));
+								PrintBin(sign_cpu, keybytes);
 								Print("Signing Data by %s..\n", sec->Dev->DeviceName);
 								if (SignSec(sec, "test_key", sign_sec, test_str, StrLen(test_str)) == false)
 								{
@@ -2058,14 +2105,14 @@ void TestSecMain(SECURE *sec)
 								{
 									Print("Ok.\n");
 									Print("sign_sec: ");
-									PrintBin(sign_sec, sizeof(sign_sec));
+									PrintBin(sign_sec, keybytes);
 									Print("Compare...");
-									if (Cmp(sign_sec, sign_cpu, sizeof(sign_cpu)) == 0)
+									if (Cmp(sign_sec, sign_cpu, keybytes) == 0)
 									{
 										Print("Ok.\n");
 										Print("Verify...");
-										if (RsaVerify(test_str, StrLen(test_str),
-											sign_sec, pub) == false)
+										if (RsaVerifyEx(test_str, StrLen(test_str),
+											sign_sec, pub, cert->bits) == false)
 										{
 											Print("[FAILED]\n");
 										}
@@ -2076,7 +2123,7 @@ void TestSecMain(SECURE *sec)
 									}
 									else
 									{
-										Print("[DIFFIRENT]\n");
+										Print("[DIFFERENT]\n");
 									}
 								}
 							}
@@ -2206,7 +2253,3 @@ void FreeSecure()
 }
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

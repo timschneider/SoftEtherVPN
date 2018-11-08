@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Build Utility
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -138,9 +153,9 @@ namespace BuildUtil
 #endif
 
 		static object lockObj = new object();
-
+		
 		// Digital-sign the data on the memory
-		public static byte[] SignMemory(byte[] srcData, string comment, bool kernelModeDriver, int cert_id)
+		public static byte[] SignMemory(byte[] srcData, string comment, bool kernelModeDriver, int cert_id, int sha_mode)
 		{
 #if	!BU_OSS
 			int i;
@@ -161,10 +176,11 @@ namespace BuildUtil
 
 				try
 				{
-					out_filename = sign.ExecSign(Path.GetFileName(in_tmp_filename),
+					out_filename = sign.ExecSignEx(Path.GetFileName(in_tmp_filename),
 						kernelModeDriver,
 						comment,
-						cert_id);
+						cert_id,
+						sha_mode);
 					break;
 				}
 				catch (Exception ex)
@@ -244,15 +260,26 @@ namespace BuildUtil
 		{
 			int cert_id = UsingCertId;
 
-			SignFile(destFileName, srcFileName, comment, kernelModeDriver, cert_id);
+			SignFile(destFileName, srcFileName, comment, kernelModeDriver, cert_id, 0);
 		}
-		public static void SignFile(string destFileName, string srcFileName, string comment, bool kernelModeDriver, int cert_id)
+		public static void SignFile(string destFileName, string srcFileName, string comment, bool kernelModeDriver, int cert_id, int sha_mode)
 		{
 #if	!BU_OSS
+			if (cert_id == 0)
+			{
+				cert_id = UsingCertId;
+			}
+
 			Con.WriteLine("Signing for '{0}'...", Path.GetFileName(destFileName));
 			byte[] srcData = File.ReadAllBytes(srcFileName);
 
-			byte[] destData = SignMemory(srcData, comment, kernelModeDriver, cert_id);
+			if (srcFileName.EndsWith(".msi", StringComparison.InvariantCultureIgnoreCase))
+			{
+				sha_mode = 1;
+				// todo: Set 2 in future !!!
+			}
+
+			byte[] destData = SignMemory(srcData, comment, kernelModeDriver, cert_id, sha_mode);
 
 			try
 			{
@@ -272,7 +299,3 @@ namespace BuildUtil
 	}
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

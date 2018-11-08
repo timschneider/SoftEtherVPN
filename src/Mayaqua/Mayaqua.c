@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -118,6 +133,7 @@ BOOL kernel_status_inited = false;				// Kernel state initialization flag
 bool g_little_endian = true;
 char *cmdline = NULL;							// Command line
 wchar_t *uni_cmdline = NULL;					// Unicode command line
+bool g_foreground = false;					// Execute service in foreground mode
 
 // Static variable
 static char *exename = NULL;						// EXE file name (ANSI)
@@ -139,7 +155,19 @@ static UINT64 probe_start = 0;
 static UINT64 probe_last = 0;
 static bool probe_enabled = false;
 
+// The function which should be called once as soon as possible after the process is started
+static bool init_proc_once_flag = false;
+void InitProcessCallOnce()
+{
+	if (init_proc_once_flag == false)
+	{
+		init_proc_once_flag = true;
 
+#ifdef	OS_WIN32
+		MsInitProcessCallOnce();
+#endif	// OS_WIN32
+	}
+}
 
 // Calculate the checksum
 USHORT CalcChecksum16(void *buf, UINT size)
@@ -475,6 +503,8 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 		return;
 	}
 
+	InitProcessCallOnce();
+
 	g_memcheck = memcheck;
 	g_debug = debug;
 	cmdline = NULL;
@@ -483,6 +513,12 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 		// Fail this for some reason when this is called this in .NET mode
 		setbuf(stdout, NULL);
 	}
+
+#ifdef OS_UNIX
+	g_foreground = (argc >= 3 && StrCmpi(argv[2], UNIX_SVC_ARG_FOREGROUND) == 0);
+#else
+	g_foreground = false;
+#endif // OS_UNIX
 
 	// Acquisition whether NT
 #ifdef	OS_WIN32
@@ -537,7 +573,7 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 	// Initialize the network communication module
 	InitNetwork();
 
-	// Initialization of the aquisition of the EXE file name
+	// Initialization of the acquisition of the EXE file name
 	InitGetExeName(argc >= 1 ? argv[0] : NULL);
 
 	// Initialization of the command line string
@@ -1115,6 +1151,11 @@ void PrintKernelStatus()
 		Print("      !!! MEMORY LEAKS DETECTED !!!\n\n");
 		if (g_memcheck == false)
 		{
+			if (IsHamMode())
+			{
+				Print("    Enable /memcheck startup option to see the leaking memory heap.\n");
+				Print("    Press Enter key to exit the process.\n");
+			}
 			GetLine(NULL, 0);
 		}
 	}
@@ -1209,7 +1250,3 @@ void PrintDebugInformation()
 
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

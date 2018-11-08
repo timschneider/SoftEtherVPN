@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -145,6 +160,7 @@ void SmProxyDlgInit(HWND hWnd, INTERNET_SETTING *t)
 	Check(hWnd, R_DIRECT_TCP, t->ProxyType == PROXY_DIRECT);
 	Check(hWnd, R_HTTPS, t->ProxyType == PROXY_HTTP);
 	Check(hWnd, R_SOCKS, t->ProxyType == PROXY_SOCKS);
+	Check(hWnd, R_SOCKS5, t->ProxyType == PROXY_SOCKS5);
 
 	SmProxyDlgUpdate(hWnd, t);
 }
@@ -210,6 +226,10 @@ UINT SmProxyDlg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *param)
 			else if (IsChecked(hWnd, R_SOCKS))
 			{
 				t->ProxyType = PROXY_SOCKS;
+			}
+			else if (IsChecked(hWnd, R_SOCKS5))
+			{
+				t->ProxyType = PROXY_SOCKS5;
 			}
 			else
 			{
@@ -857,16 +877,18 @@ UINT SmDDnsDlg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *param)
 
 // Get the ddns key from the server configuration file
 static UINT SmDdnsGetKey(char *key, SM_DDNS *d){
-	RPC *rpc = d->s->Rpc;
 	RPC_CONFIG config;
 	UINT err;
 	BUF *buf;
 	FOLDER *root, *ddnsfolder;
+	RPC *rpc;
 
 	// Validate arguments
 	if(d == NULL || d->s == NULL || key == NULL){
 		return ERR_INTERNAL_ERROR;
 	}
+
+	rpc = d->s->Rpc;
 
 	Zero(&config, sizeof(config));
 	err = ScGetConfig(d->s->Rpc, &config);
@@ -3135,7 +3157,7 @@ bool SmSetupInit(HWND hWnd, SM_SETUP *s)
 		char *password = "";
 
 		Zero(&t, sizeof(t));
-		Hash(t.HashedPassword, password, StrLen(password), true);
+		Sha0(t.HashedPassword, password, StrLen(password));
 		HashPassword(t.SecurePassword, ADMINISTRATOR_USERNAME, password);
 		StrCpy(t.HubName, sizeof(t.HubName), s->HubName);
 		t.HubType = HUB_TYPE_STANDALONE;
@@ -3453,7 +3475,7 @@ void SmSetupDlgOnOk(HWND hWnd, SM_SETUP *s)
 			s->s->IPsecMessageDisplayed = true;
 		}
 
-		// Confgure the VPN Azure if VPN Azure feature is available
+		// Configure the VPN Azure if VPN Azure feature is available
 		if (GetCapsBool(s->s->CapsList, "b_support_azure"))
 		{
 			SmAzure(hWnd, s->s, true);
@@ -9448,7 +9470,7 @@ void SmSessionDlgUpdate(HWND hWnd, SM_HUB *s)
 
 	if (s->p->ServerInfo.ServerBuildInt < 2844)
 	{
-		// Old version doen't support for remote management of the sessions
+		// Old version doesn't support for remote management of the sessions
 		ok2 = ok;
 	}
 
@@ -9612,6 +9634,11 @@ void SmSessionDlgRefresh(HWND hWnd, SM_HUB *s)
 			{
 				icon = ICO_SESSION_MONITOR;
 			}
+		}
+
+		if (e->IsDormantEnabled && e->IsDormant)
+		{
+			icon = ICO_TRAY0;
 		}
 
 		LvInsertAdd(b, icon, (void *)(e->RemoteSession), 8, tmp1, tmp8, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7);
@@ -13754,7 +13781,7 @@ void SmEditUserDlgOk(HWND hWnd, SM_EDIT_USER *s)
 		}
 		FreeRpcSetUser(&t);
 
-		MsgBoxEx(hWnd, MB_ICONINFORMATION, _UU("SM_USER_CREEATE_OK"), u->Name);
+		MsgBoxEx(hWnd, MB_ICONINFORMATION, _UU("SM_USER_CREATE_OK"), u->Name);
 	}
 	else
 	{
@@ -15221,7 +15248,7 @@ UINT SmChangeServerPasswordDlg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 			}
 			Zero(&t, sizeof(t));
-			Hash(t.HashedPassword, tmp1, StrLen(tmp1), true);
+			Sha0(t.HashedPassword, tmp1, StrLen(tmp1));
 			Copy(hash, t.HashedPassword, sizeof(hash));
 			if (CALL(hWnd, ScSetServerPassword(p->Rpc, &t)) == false)
 			{
@@ -15883,7 +15910,7 @@ void SmFarmDlgOnOk(HWND hWnd, SM_SERVER *p)
 			GetTxtA(hWnd, E_PASSWORD, pass, sizeof(pass));
 			if (StrCmp(pass, HIDDEN_PASSWORD) != 0)
 			{
-				Hash(t.MemberPassword, pass, StrLen(pass), true);
+				Sha0(t.MemberPassword, pass, StrLen(pass));
 			}
 		}
 
@@ -16098,7 +16125,7 @@ void SmConnectionDlgRefresh(HWND hWnd, SM_SERVER *p)
 
 	LvInsertEnd(b, hWnd, L_LIST);
 
-	FreeRpcEnumConnetion(&t);
+	FreeRpcEnumConnection(&t);
 }
 
 // Update the control
@@ -16537,6 +16564,11 @@ void SmSaveKeyPairDlgInit(HWND hWnd, SM_SAVE_KEY_PAIR *s)
 		Check(hWnd, R_X509_AND_KEY, true);
 	}
 
+	if (MsIsWine())
+	{
+		Disable(hWnd, R_SECURE);
+	}
+
 	SmSaveKeyPairDlgUpdate(hWnd, s);
 }
 
@@ -16929,6 +16961,13 @@ void SmSslDlgOnOk(HWND hWnd, SM_SSL *s)
 		{
 			return;
 		}
+
+		if (t.Flag1 == 0)
+		{
+			// Show the warning message
+			MsgBox(hWnd, MB_ICONWARNING, _UU("SM_CERT_NEED_ROOT"));
+		}
+
 		FreeRpcKeyPair(&t);
 
 		MsgBox(hWnd, MB_ICONINFORMATION, _UU("CM_CERT_SET_MSG"));
@@ -16979,6 +17018,7 @@ void SmSslDlgInit(HWND hWnd, SM_SSL *s)
 
 	// Set the encryption algorithm list
 	cipher_list = GetCipherList();
+	SetFont(hWnd, C_CIPHER, GetFont("Tahoma", 8, false, false, false, false));
 	CbSetHeight(hWnd, C_CIPHER, 18);
 	for (i = 0;i < cipher_list->NumTokens;i++)
 	{
@@ -17510,7 +17550,7 @@ void SmEditHubOnOk(HWND hWnd, SM_EDIT_HUB *s)
 
 	if (s->EditMode == false || StrCmp(pass1, HIDDEN_PASSWORD) != 0)
 	{
-		Hash(t.HashedPassword, pass1, StrLen(pass1), true);
+		Sha0(t.HashedPassword, pass1, StrLen(pass1));
 		HashPassword(t.SecurePassword, ADMINISTRATOR_USERNAME, pass1);
 	}
 
@@ -17536,7 +17576,7 @@ void SmEditHubOnOk(HWND hWnd, SM_EDIT_HUB *s)
 	{
 		if (CALL(hWnd, ScCreateHub(s->p->Rpc, &t)))
 		{
-			MsgBoxEx(hWnd, MB_ICONINFORMATION, _UU("CM_EDIT_HUB_CREATER"), hubname);
+			MsgBoxEx(hWnd, MB_ICONINFORMATION, _UU("CM_EDIT_HUB_CREATED"), hubname);
 			EndDialog(hWnd, true);
 		}
 	}
@@ -18330,6 +18370,7 @@ void SmServerDlgInit(HWND hWnd, SM_SERVER *p)
 void SmServerDlgRefresh(HWND hWnd, SM_SERVER *p)
 {
 	RPC_ENUM_HUB t;
+	RPC_LISTENER_LIST t2;
 	DDNS_CLIENT_STATUS st;
 	RPC_AZURE_STATUS sta;
 	UINT i;
@@ -18417,38 +18458,34 @@ void SmServerDlgRefresh(HWND hWnd, SM_SERVER *p)
 	}
 
 	// Listener list update
-	if (p != NULL)
+	Zero(&t2, sizeof(RPC_LISTENER_LIST));
+	if (CALL(hWnd, ScEnumListener(p->Rpc, &t2)))
 	{
-		RPC_LISTENER_LIST t;
-		Zero(&t, sizeof(RPC_LISTENER_LIST));
-		if (CALL(hWnd, ScEnumListener(p->Rpc, &t)))
+		LVB *b = LvInsertStart();
+		for (i = 0;i < t2.NumPort;i++)
 		{
-			LVB *b = LvInsertStart();
-			for (i = 0;i < t.NumPort;i++)
+			wchar_t tmp[MAX_SIZE];
+			wchar_t *status;
+			UINT icon;
+			UniFormat(tmp, sizeof(tmp), _UU("CM_LISTENER_TCP_PORT"), t2.Ports[i]);
+
+			status = _UU("CM_LISTENER_ONLINE");
+			icon = ICO_PROTOCOL;
+			if (t2.Errors[i])
 			{
-				wchar_t tmp[MAX_SIZE];
-				wchar_t *status;
-				UINT icon;
-				UniFormat(tmp, sizeof(tmp), _UU("CM_LISTENER_TCP_PORT"), t.Ports[i]);
-
-				status = _UU("CM_LISTENER_ONLINE");
-				icon = ICO_PROTOCOL;
-				if (t.Errors[i])
-				{
-					status = _UU("CM_LISTENER_ERROR");
-					icon = ICO_PROTOCOL_X;
-				}
-				else if (t.Enables[i] == false)
-				{
-					status = _UU("CM_LISTENER_OFFLINE");
-					icon = ICO_PROTOCOL_OFFLINE;
-				}
-
-				LvInsertAdd(b, icon, (void *)t.Ports[i], 2, tmp, status);
+				status = _UU("CM_LISTENER_ERROR");
+				icon = ICO_PROTOCOL_X;
 			}
-			LvInsertEnd(b, hWnd, L_LISTENER);
-			FreeRpcListenerList(&t);
+			else if (t2.Enables[i] == false)
+			{
+				status = _UU("CM_LISTENER_OFFLINE");
+				icon = ICO_PROTOCOL_OFFLINE;
+			}
+
+			LvInsertAdd(b, icon, (void *)t2.Ports[i], 2, tmp, status);
 		}
+		LvInsertEnd(b, hWnd, L_LISTENER);
+		FreeRpcListenerList(&t2);
 	}
 
 	// Get the DDNS client state
@@ -18930,6 +18967,8 @@ UINT SmServerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *pa
 
 			SmShowIPSecMessageIfNecessary(hWnd, p);
 
+			SmShowCertRegenerateMessageIfNecessary(hWnd, p);
+
 			SetTimer(hWnd, 3, 150, NULL);
 			break;
 
@@ -18952,6 +18991,73 @@ UINT SmServerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *pa
 	LvStandardHandler(hWnd, msg, wParam, lParam, L_HUB);
 
 	return 0;
+}
+
+// Display the message about the cert
+void SmShowCertRegenerateMessageIfNecessary(HWND hWnd, SM_SERVER *p)
+{
+	// Validate arguments
+	if (p == NULL)
+	{
+		return;
+	}
+
+	if (p->ServerAdminMode && p->Bridge == false)
+	{
+		RPC_KEY_PAIR t;
+
+		Zero(&t, sizeof(t));
+
+		if (ScGetServerCert(p->Rpc, &t) == ERR_NO_ERROR)
+		{
+			if (t.Cert != NULL && t.Cert->has_basic_constraints == false)
+			{
+				if (t.Cert->root_cert)
+				{
+					if (MsRegReadInt(REG_CURRENT_USER, SM_HIDE_CERT_UPDATE_MSG_KEY, p->ServerName) == 0)
+					{
+						if (MsgBox(hWnd, MB_ICONQUESTION | MB_YESNO, _UU("SM_CERT_MESSAGE")) == IDYES)
+						{
+							X *x;
+							K *k;
+
+							// Regenerating the certificate
+							if (SmRegenerateServerCert(hWnd, p, NULL, &x, &k, false))
+							{
+								// Confirmation message
+								if (MsgBox(hWnd, MB_ICONEXCLAMATION | MB_YESNO, _UU("SM_REGENERATE_CERT_MSG")) == IDYES)
+								{
+									// Set the new certificate and private key
+									RPC_KEY_PAIR t2;
+
+									Zero(&t2, sizeof(t2));
+
+									t2.Cert = CloneX(x);
+									t2.Key = CloneK(k);
+
+									if (CALL(hWnd, ScSetServerCert(p->Rpc, &t2)))
+									{
+										FreeRpcKeyPair(&t2);
+
+										MsgBox(hWnd, MB_ICONINFORMATION, _UU("CM_CERT_SET_MSG"));
+									}
+								}
+
+								FreeX(x);
+								FreeK(k);
+							}
+						}
+						else
+						{
+							MsRegWriteInt(REG_CURRENT_USER, SM_HIDE_CERT_UPDATE_MSG_KEY, p->ServerName, 1);
+						}
+					}
+				}
+			}
+
+			FreeRpcKeyPair(&t);
+		}
+	}
 }
 
 // Display messages about IPsec, and prompt for the setting
@@ -19006,13 +19112,6 @@ void SmConnectEx(HWND hWnd, SETTING *s, bool is_in_client)
 		return;
 	}
 
-	// Updater terminate
-	if (sm->Update != NULL)
-	{
-		FreeUpdateUi(sm->Update);
-		sm->Update = NULL;
-	}
-
 	// Disable the control
 	Disable(hWnd, L_SETTING);
 	Disable(hWnd, B_NEW_SETTING);
@@ -19034,7 +19133,7 @@ ENTER_PASSWORD:
 		pass = SmPassword(hWnd, s->ClientOption.Hostname);
 		if (pass != NULL)
 		{
-			Hash(s->HashedPassword, pass, StrLen(pass), true);
+			Sha0(s->HashedPassword, pass, StrLen(pass));
 			Free(pass);
 			ok = true;
 		}
@@ -19079,7 +19178,7 @@ ENTER_PASSWORD:
 			RPC_TEST flag;
 			bool cancel = false;
 
-			Hash(test, "", 0, true);
+			Sha0(test, "", 0);
 
 			if (Cmp(test, s->HashedPassword, SHA1_SIZE) == 0 || Cmp(test, rpc->VpnServerHashedPassword, SHA1_SIZE) == 0)
 			{
@@ -19224,7 +19323,7 @@ ENTER_PASSWORD:
 							family_name, p.ServerName);
 
 						update = InitUpdateUi(update_software_title, update_software_name, family_name, p.ServerInfo.ServerBuildDate,
-							p.ServerInfo.ServerBuildInt, p.ServerInfo.ServerVerInt, NULL);
+							p.ServerInfo.ServerBuildInt, p.ServerInfo.ServerVerInt, NULL, false);
 					}
 				}
 
@@ -19261,8 +19360,13 @@ ENTER_PASSWORD:
 	Enable(hWnd, IDOK);
 	Enable(hWnd, B_ABOUT);
 	Enable(hWnd, IDCANCEL);
-	Enable(hWnd, B_SECURE_MANAGER);
-	Enable(hWnd, B_SELECT_SECURE);
+
+	if (MsIsWine() == false)
+	{
+		Enable(hWnd, B_SECURE_MANAGER);
+		Enable(hWnd, B_SELECT_SECURE);
+	}
+
 	Enable(hWnd, B_CERT_TOOL);
 }
 
@@ -19335,6 +19439,7 @@ void SmEditSettingDlgInit(HWND hWnd, SM_EDIT_SETTING *p)
 	Check(hWnd, R_DIRECT_TCP, s->ClientOption.ProxyType == PROXY_DIRECT);
 	Check(hWnd, R_HTTPS, s->ClientOption.ProxyType == PROXY_HTTP);
 	Check(hWnd, R_SOCKS, s->ClientOption.ProxyType == PROXY_SOCKS);
+	Check(hWnd, R_SOCKS5, s->ClientOption.ProxyType == PROXY_SOCKS5);
 
 	// Management mode setting
 	Check(hWnd, R_SERVER_ADMIN, s->ServerAdminMode);
@@ -19351,7 +19456,7 @@ void SmEditSettingDlgInit(HWND hWnd, SM_EDIT_SETTING *p)
 	{
 		UCHAR test[SHA1_SIZE];
 
-		Hash(test, "", 0, true);
+		Sha0(test, "", 0);
 		if (Cmp(test, s->HashedPassword, SHA1_SIZE) != 0)
 		{
 			SetTextA(hWnd, E_PASSWORD, HIDDEN_PASSWORD);
@@ -19486,7 +19591,7 @@ void SmEditSettingDlgUpdate(HWND hWnd, SM_EDIT_SETTING *p)
 		GetTxtA(hWnd, E_PASSWORD, tmp, sizeof(tmp));
 		if (StrCmp(tmp, HIDDEN_PASSWORD) != 0)
 		{
-			Hash(s->HashedPassword, tmp, StrLen(tmp), true);
+			Sha0(s->HashedPassword, tmp, StrLen(tmp));
 		}
 	}
 
@@ -19688,7 +19793,7 @@ bool SmAddSettingDlg(HWND hWnd, wchar_t *new_name, UINT new_name_size)
 		if (SmGetSetting(tmp) == NULL)
 		{
 			UniStrCpy(s.Title, sizeof(s.Title), tmp);
-			Hash(s.HashedPassword, "", 0, true);
+			Sha0(s.HashedPassword, "", 0);
 			s.ServerAdminMode = true;
 			break;
 		}
@@ -20012,7 +20117,7 @@ void SmInitDefaultSettingList()
 
 			UniStrCpy(s->Title, sizeof(s->Title), _UU("SM_LOCALHOST"));
 			s->ServerAdminMode = true;
-			Hash(s->HashedPassword, "", 0, true);
+			Sha0(s->HashedPassword, "", 0);
 			UniStrCpy(s->ClientOption.AccountName, sizeof(s->ClientOption.AccountName), s->Title);
 			StrCpy(s->ClientOption.Hostname, sizeof(s->ClientOption.Hostname), "localhost");
 			s->ClientOption.Port = GC_DEFAULT_PORT;
@@ -20060,6 +20165,12 @@ void SmMainDlgInit(HWND hWnd)
 	}
 
 	DlgFont(hWnd, IDOK, 10, true);
+
+	if (MsIsWine())
+	{
+		Disable(hWnd, B_SECURE_MANAGER);
+		Disable(hWnd, B_SELECT_SECURE);
+	}
 
 	Focus(hWnd, L_SETTING);
 
@@ -20165,7 +20276,7 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 
 		// Updater start
 		sm->Update = InitUpdateUi(_UU("PRODUCT_NAME_VPN_SMGR"), NAME_OF_VPN_SERVER_MANAGER, NULL, GetCurrentBuildDate(),
-			CEDAR_BUILD, CEDAR_VER, NULL);
+			CEDAR_VERSION_BUILD, GetCedarVersionNumber(), NULL, false);
 		break;
 
 	case WM_TIMER:
@@ -20181,6 +20292,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 		switch (wParam)
 		{
 		case IDOK:
+			DisableUpdateUi(sm->Update);
+
 			// Connection
 			i = LvGetSelected(hWnd, L_SETTING);
 			if (i != INFINITE)
@@ -20210,6 +20323,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_NEW_SETTING:
+			DisableUpdateUi(sm->Update);
+
 			// Add
 			if (SmAddSettingDlg(hWnd, new_name, sizeof(new_name)))
 			{
@@ -20218,6 +20333,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_EDIT_SETTING:
+			DisableUpdateUi(sm->Update);
+
 			// Edit
 			if (SmEditSettingDlg(hWnd))
 			{
@@ -20228,6 +20345,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_DELETE:
+			DisableUpdateUi(sm->Update);
+
 			// Delete
 			i = LvGetSelected(hWnd, L_SETTING);
 			if (i != INFINITE)
@@ -20253,16 +20372,22 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_SECURE_MANAGER:
+			DisableUpdateUi(sm->Update);
+
 			// Smart Card Manager
 			SmSecureManager(hWnd);
 			break;
 
 		case B_SELECT_SECURE:
+			DisableUpdateUi(sm->Update);
+
 			// Smart card selection
 			SmSelectSecureId(hWnd);
 			break;
 
 		case B_CERT_TOOL:
+			DisableUpdateUi(sm->Update);
+
 			// Certificate Creation Tool
 			SmCreateCert(hWnd, NULL, NULL, false, NULL, false);
 			break;
@@ -20376,6 +20501,8 @@ void SmMainDlg()
 // Server Manager main process
 void MainSM()
 {
+//	MsgBoxEx(NULL, 0, L"MsIsWine: %u\n", MsIsWine());
+
 	if (sm->TempSetting == NULL)
 	{
 		// Open the main window
@@ -20489,7 +20616,7 @@ void SmParseCommandLine()
 					b = StrToBin(password);
 					if (b == NULL || b->Size != SHA1_SIZE)
 					{
-						Hash(s->HashedPassword, password, StrLen(password), true);
+						Sha0(s->HashedPassword, password, StrLen(password));
 					}
 					else
 					{
@@ -20574,7 +20701,3 @@ void SMExec()
 #endif	// WIN32
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

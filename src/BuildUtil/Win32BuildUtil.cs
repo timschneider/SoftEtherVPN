@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Build Utility
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -125,12 +140,12 @@ namespace BuildUtil
 		// Generate vpnweb.ocx
 		public static void GenerateVpnWebOcxCab(string dstFileName, string ocxFileName)
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 
-			string cabVer = string.Format("{0},{1},0,{2}", version / 100, version % 100, build);
+			string cabVer = string.Format("{0},{1},0,{2}", versionMajor, versionMinor, versionBuild);
 			string cabFileName = IO.CreateTempFileNameByExt(".cab");
 			Mutex m = new Mutex(false, "cabtmp_mutex");
 
@@ -166,12 +181,12 @@ namespace BuildUtil
 		}
 
 		// Generate a version information resource
-		public static void GenerateVersionInfoResource(string targetExeName, string outName, string rc_name)
+		public static void GenerateVersionInfoResource(string targetExeName, string outName, string rc_name, string product_name)
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 
 			if (Str.IsEmptyStr(rc_name))
 			{
@@ -184,17 +199,24 @@ namespace BuildUtil
 			string exeFileName = Path.GetFileName(targetExeName);
 			string internalName = Path.GetFileNameWithoutExtension(exeFileName);
 
+			if (Str.IsEmptyStr(product_name) == false)
+			{
+				body = Str.ReplaceStr(body, "$PRODUCTNAME$", product_name);
+			}
+			else
+			{
 #if !BU_SOFTETHER
-			body = Str.ReplaceStr(body, "$PRODUCTNAME$", "PacketiX VPN");
+				body = Str.ReplaceStr(body, "$PRODUCTNAME$", "PacketiX VPN");
 #else		
-			body = Str.ReplaceStr(body, "$PRODUCTNAME$", "SoftEther VPN");
+				body = Str.ReplaceStr(body, "$PRODUCTNAME$", "SoftEther VPN");
 #endif
+			}
 			body = Str.ReplaceStr(body, "$INTERNALNAME$", internalName);
 			body = Str.ReplaceStr(body, "$YEAR$", date.Year.ToString());
 			body = Str.ReplaceStr(body, "$FILENAME$", exeFileName);
-			body = Str.ReplaceStr(body, "$VER_MAJOR$", (version / 100).ToString());
-			body = Str.ReplaceStr(body, "$VER_MINOR$", (version % 100).ToString());
-			body = Str.ReplaceStr(body, "$VER_BUILD$", build.ToString());
+			body = Str.ReplaceStr(body, "$VER_MAJOR$", versionMajor.ToString());
+			body = Str.ReplaceStr(body, "$VER_MINOR$", versionMinor.ToString());
+			body = Str.ReplaceStr(body, "$VER_BUILD$", versionBuild.ToString());
 
 			IO f = IO.CreateTempFileByExt(".rc");
 			string filename = f.Name;
@@ -236,47 +258,48 @@ namespace BuildUtil
 		// Increment the build number
 		public static void IncrementBuildNumber()
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
 
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
-			build++;
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
+			versionBuild++;
 
-			WriteBuildInfoToTextFile(build, version, name, date);
+			WriteBuildInfoToTextFile(versionMajor, versionMinor, versionBuild, name, date);
 
 			SetNowDate();
 
-			Con.WriteLine("New build number: {0}", build);
+			Con.WriteLine("New build number: {0}", versionBuild);
 		}
 
 		// Set the date and time
 		public static void SetNowDate()
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
 
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 
 			date = DateTime.Now;
 
-			WriteBuildInfoToTextFile(build, version, name, date);
+			WriteBuildInfoToTextFile(versionMajor, versionMinor, versionBuild, name, date);
 		}
 
 		// Write the build number and the version number in the text file
-		public static void WriteBuildInfoToTextFile(int build, int version, string name, DateTime date)
+		public static void WriteBuildInfoToTextFile(int versionMajor, int versionMinor, int versionBuild, string name, DateTime date)
 		{
 			string filename = Path.Combine(Paths.BaseDirName, "CurrentBuild.txt");
 
-			WriteBuildInfoToTextFile(build, version, name, date, filename);
+			WriteBuildInfoToTextFile(versionMajor, versionMinor, versionBuild, name, date, filename);
 		}
-		public static void WriteBuildInfoToTextFile(int build, int version, string name, DateTime date, string filename)
+		public static void WriteBuildInfoToTextFile(int versionMajor, int versionMinor, int versionBuild, string name, DateTime date, string filename)
 		{
 			using (StreamWriter w = new StreamWriter(filename))
 			{
-				w.WriteLine("BUILD_NUMBER {0}", build);
-				w.WriteLine("VERSION {0}", version);
+				w.WriteLine("VERSION_MAJOR {0}", versionMajor);
+				w.WriteLine("VERSION_MINOR {0}", versionMinor);
+				w.WriteLine("VERSION_BUILD {0}", versionBuild);
 				w.WriteLine("BUILD_NAME {0}", name);
 				w.WriteLine("BUILD_DATE {0}", Str.DateTimeToStrShort(date));
 
@@ -286,13 +309,13 @@ namespace BuildUtil
 		}
 
 		// Read the build number and the version number from a text file
-		public static void ReadBuildInfoFromTextFile(out int build, out int version, out string name, out DateTime date)
+		public static void ReadBuildInfoFromTextFile(out int versionMajor, out int versionMinor, out int versionBuild, out string name, out DateTime date)
 		{
 			string filename = Path.Combine(Paths.BaseDirName, "CurrentBuild.txt");
 
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date, filename);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date, filename);
 		}
-		public static void ReadBuildInfoFromTextFile(out int build, out int version, out string name, out DateTime date, string filename)
+		public static void ReadBuildInfoFromTextFile(out int versionMajor, out int versionMinor, out int versionBuild, out string name, out DateTime date, string filename)
 		{
 			char[] seps = { '\t', ' ', };
 			name = "";
@@ -300,7 +323,7 @@ namespace BuildUtil
 
 			using (StreamReader r = new StreamReader(filename))
 			{
-				build = version = 0;
+				versionBuild = versionMinor = versionMajor = 0;
 
 				while (true)
 				{
@@ -313,14 +336,19 @@ namespace BuildUtil
 					string[] tokens = line.Split(seps, StringSplitOptions.RemoveEmptyEntries);
 					if (tokens.Length == 2)
 					{
-						if (tokens[0].Equals("BUILD_NUMBER", StringComparison.InvariantCultureIgnoreCase))
+						if (tokens[0].Equals("VERSION_MAJOR", StringComparison.InvariantCultureIgnoreCase))
 						{
-							build = int.Parse(tokens[1]);
+							versionMajor = int.Parse(tokens[1]);
 						}
 
-						if (tokens[0].Equals("VERSION", StringComparison.InvariantCultureIgnoreCase))
+						if (tokens[0].Equals("VERSION_MINOR", StringComparison.InvariantCultureIgnoreCase))
 						{
-							version = int.Parse(tokens[1]);
+							versionMinor = int.Parse(tokens[1]);
+						}
+
+						if (tokens[0].Equals("VERSION_BUILD", StringComparison.InvariantCultureIgnoreCase))
+						{
+							versionBuild = int.Parse(tokens[1]);
 						}
 
 						if (tokens[0].Equals("BUILD_NAME", StringComparison.InvariantCultureIgnoreCase))
@@ -339,7 +367,7 @@ namespace BuildUtil
 
 				r.Close();
 
-				if (build == 0 || version == 0 || Str.IsEmptyStr(name) || date.Ticks == 0)
+				if (versionBuild == 0 || versionMinor == 0 || versionMajor == 0 || Str.IsEmptyStr(name) || date.Ticks == 0)
 				{
 					throw new ApplicationException(string.Format("Wrong file data: '{0}'", filename));
 				}
@@ -351,18 +379,18 @@ namespace BuildUtil
 		{
 			SetNowDate();
 
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 			string username = Env.UserName;
 			string pcname = Env.MachineName;
 
-			NormalizeSourceCode(build, version, username, pcname, date);
+			NormalizeSourceCode(versionMajor, versionMinor, versionBuild, username, pcname, date);
 		}
 
 		// Apply build number, version number, user name, and PC name to the source code
-		public static void NormalizeSourceCode(int buildNumber, int version, string userName, string pcName, DateTime date)
+		public static void NormalizeSourceCode(int versionMajor, int versionMinor, int versionBuild, string userName, string pcName, DateTime date)
 		{
 			DateTime now = date;
 			char[] seps = { '\t', ' ', };
@@ -417,7 +445,7 @@ namespace BuildUtil
 									// Build number portion of the source code
 									if (tokens[0].Equals("//") && tokens[1].Equals("Build") && Str.IsNumber(tokens[2]))
 									{
-										newLine = line.Replace(tokens[2], buildNumber.ToString());
+										newLine = line.Replace(tokens[2], versionBuild.ToString());
 									}
 								}
 							}
@@ -427,14 +455,19 @@ namespace BuildUtil
 								if (tokens.Length == 3)
 								{
 									// String part of the version information of Cedar.h
-									if (tokens[0].Equals("#define") && tokens[1].Equals("CEDAR_BUILD"))
+									if (tokens[0].Equals("#define") && tokens[1].Equals("CEDAR_VERSION_MAJOR"))
 									{
-										newLine = line.Replace(tokens[2], buildNumber.ToString());
+										newLine = line.Replace(tokens[2], versionMajor.ToString());
 									}
 
-									if (tokens[0].Equals("#define") && tokens[1].Equals("CEDAR_VER"))
+									if (tokens[0].Equals("#define") && tokens[1].Equals("CEDAR_VERSION_MINOR"))
 									{
-										newLine = line.Replace(tokens[2], version.ToString());
+										newLine = line.Replace(tokens[2], versionMinor.ToString());
+									}
+
+									if (tokens[0].Equals("#define") && tokens[1].Equals("CEDAR_VERSION_BUILD"))
+									{
+										newLine = line.Replace(tokens[2], versionBuild.ToString());
 									}
 
 									if (tokens[0].Equals("#define") && tokens[1].Equals("BUILDER_NAME"))
@@ -605,19 +638,19 @@ namespace BuildUtil
 				StreamWriter bat = new StreamWriter(batFileName, false, Str.ShiftJisEncoding);
 				bat.WriteLine("call \"{0}\"", Paths.VisualStudioVCBatchFileName);
 				bat.WriteLine("echo on");
-				bat.WriteLine("\"{0}\" /toolsversion:3.5 /verbosity:detailed /target:Clean /property:Configuration=Release /property:Platform=Win32 \"{1}\"",
+				bat.WriteLine("\"{0}\" /toolsversion:3.5 /target:Clean /property:Configuration=Release /property:Platform=Win32 \"{1}\"",
 					Paths.MSBuildFileName, Paths.VPN4SolutionFileName);
 				bat.WriteLine("IF ERRORLEVEL 1 GOTO LABEL_ERROR");
 
-				bat.WriteLine("\"{0}\" /toolsversion:3.5 /verbosity:detailed /target:Clean /property:Configuration=Release /property:Platform=x64 \"{1}\"",
+				bat.WriteLine("\"{0}\" /toolsversion:3.5 /target:Clean /property:Configuration=Release /property:Platform=x64 \"{1}\"",
 					Paths.MSBuildFileName, Paths.VPN4SolutionFileName);
 				bat.WriteLine("IF ERRORLEVEL 1 GOTO LABEL_ERROR");
 
-				bat.WriteLine("\"{0}\" /toolsversion:3.5 /verbosity:detailed /target:Rebuild /property:Configuration=Release /property:Platform=Win32 \"{1}\"",
+				bat.WriteLine("\"{0}\" /toolsversion:3.5 /target:Rebuild /property:Configuration=Release /property:Platform=Win32 \"{1}\"",
 					Paths.MSBuildFileName, Paths.VPN4SolutionFileName);
 				bat.WriteLine("IF ERRORLEVEL 1 GOTO LABEL_ERROR");
 
-				bat.WriteLine("\"{0}\" /toolsversion:3.5 /verbosity:detailed /target:Rebuild /property:Configuration=Release /property:Platform=x64 \"{1}\"",
+				bat.WriteLine("\"{0}\" /toolsversion:3.5 /target:Rebuild /property:Configuration=Release /property:Platform=x64 \"{1}\"",
 					Paths.MSBuildFileName, Paths.VPN4SolutionFileName);
 				bat.WriteLine("IF ERRORLEVEL 1 GOTO LABEL_ERROR");
 
@@ -803,6 +836,10 @@ namespace BuildUtil
 			{
 				return false;
 			}
+			if (Str.InStr(fileName, "DriverPackages", false))
+			{
+				return false;
+			}
 			if (Str.InStr(fileName, "_nosign", false))
 			{
 				return false;
@@ -822,11 +859,11 @@ namespace BuildUtil
 		// Create and sign the Inf file and the catalog file for SeLow
 		public static void SignSeLowInfFiles(string cpu)
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
 
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 
 			string hamcore = Path.Combine(Paths.BinDirName, "hamcore");
 			string sys_src = Path.Combine(hamcore, "SeLow_" + cpu + ".sys");
@@ -842,7 +879,7 @@ namespace BuildUtil
 				throw new ApplicationException(sys_src + " is not signed.");
 			}
 
-			generateINFFilesForPlatform(inf_src, sys_src, null, dst_dir, version, build, date, true);
+			generateINFFilesForPlatform(inf_src, sys_src, null, dst_dir, versionMajor, versionMinor, versionBuild, date, true);
 
 			Con.WriteLine("Generating INF Files for SeLow Ok.");
 		}
@@ -850,10 +887,10 @@ namespace BuildUtil
 		// Create Inf file for Windows 8
 		public static void GenerateINFFilesForWindows8(string cpu)
 		{
-			int build, version;
+			int versionMajor, versionMinor, versionBuild;
 			string name;
 			DateTime date;
-			ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 
 			string hamcore = Path.Combine(Paths.BinDirName, "hamcore");
 			string inf_src_x86 = Path.Combine(hamcore, "vpn_driver.inf");
@@ -875,7 +912,7 @@ namespace BuildUtil
 					throw new ApplicationException(sys_src_x64 + " is not signed.");
 				}
 
-				generateINFFilesForPlatform(inf_src_x64, sys_src_x64, sys6_src_x64, dst_x64, version, build, date, false);
+				generateINFFilesForPlatform(inf_src_x64, sys_src_x64, sys6_src_x64, dst_x64, versionMajor, versionMinor, versionBuild, date, false);
 			}
 			else
 			{
@@ -884,22 +921,35 @@ namespace BuildUtil
 					throw new ApplicationException(sys_src_x86 + " is not signed.");
 				}
 
-				generateINFFilesForPlatform(inf_src_x86, sys_src_x86, sys6_src_x86, dst_x86, version, build, date, false);
+				generateINFFilesForPlatform(inf_src_x86, sys_src_x86, sys6_src_x86, dst_x86, versionMajor, versionMinor, versionBuild, date, false);
 			}
 
 			Con.WriteLine("Generating INF Files for Windows 8 Ok.");
 		}
-		static void generateINFFilesForPlatform(string inf, string sys, string sys6, string dstDir, int ver, int build, DateTime date, bool selow)
+		static void generateINFFilesForPlatform(string inf, string sys, string sys6, string dstDir, int versionMajor, int versionMinor, int versionBuild, DateTime date, bool selow)
 		{
 
 			string cdfFileName = Path.Combine(dstDir, "inf.cdf");
+			string cdfFileName2 = Path.Combine(dstDir, "inf2.cdf");
 			string catFileName = Path.Combine(dstDir, "inf.cat");
+			string catFileName2 = Path.Combine(dstDir, "inf2.cat");
 			StringWriter sw = new StringWriter();
+			StringWriter sw2 = new StringWriter();
 
 			string txt = File.ReadAllText(inf, Str.ShiftJisEncoding);
 
 			IO.DeleteFilesAndSubDirsInDir(dstDir);
 			IO.MakeDirIfNotExists(dstDir);
+
+			string utility_dirname = Path.Combine(Paths.BaseDirName, @"BuildFiles\Utility");
+			string makecat1 = Path.Combine(dstDir, "makecat.exe");
+			string makecat2 = Path.Combine(dstDir, "makecat.exe.manifest");
+			string makecat3 = Path.Combine(dstDir, "Microsoft.Windows.Build.Signing.wintrust.dll.manifest");
+			string makecat4 = Path.Combine(dstDir, "wintrust.dll");
+			File.Copy(Path.Combine(utility_dirname, "makecat.exe"), makecat1, true);
+			File.Copy(Path.Combine(utility_dirname, "makecat.exe.manifest"), makecat2, true);
+			File.Copy(Path.Combine(utility_dirname, "Microsoft.Windows.Build.Signing.wintrust.dll.manifest"), makecat3, true);
+			File.Copy(Path.Combine(utility_dirname, "wintrust.dll"), makecat4, true);
 
 			string dst_sys_name = Path.Combine(dstDir, Path.GetFileName(sys));
 			File.Copy(sys, dst_sys_name, true);
@@ -912,14 +962,28 @@ namespace BuildUtil
 			}
 
 			sw.WriteLine("[CatalogHeader]");
+			sw2.WriteLine("[CatalogHeader]");
+
 			sw.WriteLine("name=inf.cat");
+			sw2.WriteLine("name=inf2.cat");
+
+			sw2.WriteLine("CatalogVersion=2");
+			sw2.WriteLine("HashAlgorithms=SHA256");
+			sw2.WriteLine("PageHashes=true");
+
 			sw.WriteLine();
+			sw2.WriteLine();
+
 			sw.WriteLine("[CatalogFiles]");
+			sw2.WriteLine("[CatalogFiles]");
+			
 			sw.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_sys_name));
+			sw2.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_sys_name));
 
 			if (sys6 != null)
 			{
 				sw.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_sys6_name));
+				sw2.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_sys6_name));
 			}
 
 			int i;
@@ -947,9 +1011,9 @@ namespace BuildUtil
 				body = Str.ReplaceStr(body, "$YEAR$", date.Year.ToString("D4"));
 				body = Str.ReplaceStr(body, "$MONTH$", date.Month.ToString("D2"));
 				body = Str.ReplaceStr(body, "$DAY$", date.Day.ToString("D2"));
-				body = Str.ReplaceStr(body, "$VER_MAJOR$", (ver / 100).ToString());
-				body = Str.ReplaceStr(body, "$VER_MINOR$", (ver % 100).ToString());
-				body = Str.ReplaceStr(body, "$VER_BUILD$", build.ToString());
+				body = Str.ReplaceStr(body, "$VER_MAJOR$", versionMajor.ToString());
+				body = Str.ReplaceStr(body, "$VER_MINOR$", versionMinor.ToString());
+				body = Str.ReplaceStr(body, "$VER_BUILD$", versionBuild.ToString());
 				body = Str.ReplaceStr(body, "[Manufacturer]", "CatalogFile.NT\t\t\t\t= inf_" + name + ".cat\r\n\r\n[Manufacturer]");
 
 				string dst_inf_name = Path.Combine(dstDir, "INF_" + name + ".inf");
@@ -967,6 +1031,7 @@ namespace BuildUtil
 				File.WriteAllText(dst_inf_name, body, Str.ShiftJisEncoding);
 
 				sw.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_inf_name));
+				sw2.WriteLine("<hash>{0}={0}", Path.GetFileName(dst_inf_name));
 
 				if (selow)
 				{
@@ -974,26 +1039,348 @@ namespace BuildUtil
 				}
 			}
 			sw.WriteLine();
+			sw2.WriteLine();
 
 			File.WriteAllText(cdfFileName, sw.ToString());
+			File.WriteAllText(cdfFileName2, sw2.ToString());
 
 			// generate catalog file
 			Directory.SetCurrentDirectory(dstDir);
 			ExecCommand(Paths.MakeCatFilename, string.Format("\"{0}\"", cdfFileName));
+			ExecCommand(makecat1, string.Format("\"{0}\"", cdfFileName2));
 
 			// sign catalog file
 			CodeSign.SignFile(catFileName, catFileName, "Catalog File", false);
+			CodeSign.SignFile(catFileName2, catFileName2, "Catalog File", false);
 
 			// delete cdf file
 			File.Delete(cdfFileName);
+			File.Delete(cdfFileName2);
 
 			// delete sys file
 			File.Delete(dst_sys_name);
+
+			File.Delete(makecat1);
+			File.Delete(makecat2);
+			File.Delete(makecat3);
+			File.Delete(makecat4);
 
 			if (sys6 != null)
 			{
 				File.Delete(dst_sys6_name);
 			}
+		}
+
+		static string process_inf_file(string src_inf_txt, int versionMajor, int versionMinor, int versionBuild, DateTime date, string sys_name, string name, string catfile, bool replace_mac_address)
+		{
+			string body = src_inf_txt;
+
+			if (Str.IsEmptyStr(sys_name) == false)
+			{
+				body = Str.ReplaceStr(body, "$TAG_SYS_NAME$", sys_name);
+			}
+			if (Str.IsEmptyStr(name) == false)
+			{
+				body = Str.ReplaceStr(body, "$TAG_INSTANCE_NAME$", name);
+			}
+			if (replace_mac_address)
+			{
+				body = Str.ReplaceStr(body, "$TAG_MAC_ADDRESS$", "000001000001");
+			}
+			body = Str.ReplaceStr(body, "$YEAR$", date.Year.ToString("D4"));
+			body = Str.ReplaceStr(body, "$MONTH$", date.Month.ToString("D2"));
+			body = Str.ReplaceStr(body, "$DAY$", date.Day.ToString("D2"));
+			body = Str.ReplaceStr(body, "$VER_MAJOR$", versionMajor.ToString());
+			body = Str.ReplaceStr(body, "$VER_MINOR$", versionMinor.ToString());
+			body = Str.ReplaceStr(body, "$VER_BUILD$", versionBuild.ToString());
+
+			if (Str.IsEmptyStr(catfile) == false)
+			{
+				body = Str.ReplaceStr(body, "$CATALOG_FILENAME$", catfile);
+				body = Str.ReplaceStr(body, ";CatalogFile.NT", "CatalogFile.NT");
+			}
+
+			body += "\r\n; Auto Generated " + Str.DateTimeToStrShortWithMilliSecs(DateTime.Now) + "\r\n\r\n";
+
+			return body;
+		}
+
+		static void make_cat_file(string dir, string[] filename_list, string catname, bool win8, bool no_sign)
+		{
+			string utility_dirname = Path.Combine(Paths.BaseDirName, @"BuildFiles\Utility");
+			string makecat1 = Path.Combine(dir, "makecat.exe");
+			string makecat2 = Path.Combine(dir, "makecat.exe.manifest");
+			string makecat3 = Path.Combine(dir, "Microsoft.Windows.Build.Signing.wintrust.dll.manifest");
+			string makecat4 = Path.Combine(dir, "wintrust.dll");
+			File.Copy(Path.Combine(utility_dirname, "makecat.exe"), makecat1, true);
+			File.Copy(Path.Combine(utility_dirname, "makecat.exe.manifest"), makecat2, true);
+			File.Copy(Path.Combine(utility_dirname, "Microsoft.Windows.Build.Signing.wintrust.dll.manifest"), makecat3, true);
+			File.Copy(Path.Combine(utility_dirname, "wintrust.dll"), makecat4, true);
+
+			StringWriter sw2 = new StringWriter();
+			sw2.WriteLine("[CatalogHeader]");
+			sw2.WriteLine("name=" + catname);
+
+			if (win8)
+			{
+				sw2.WriteLine("CatalogVersion=2");
+				sw2.WriteLine("HashAlgorithms=SHA256");
+				sw2.WriteLine("PageHashes=true");
+			}
+
+			sw2.WriteLine();
+
+			sw2.WriteLine("[CatalogFiles]");
+
+			foreach (string filename in filename_list)
+			{
+				sw2.WriteLine("<hash>{0}={0}", filename);
+			}
+
+			sw2.WriteLine();
+			
+			string cdf_file_name = catname + ".cdf";
+
+			Directory.SetCurrentDirectory(dir);
+
+			File.WriteAllText(cdf_file_name, sw2.ToString());
+			ExecCommand(makecat1, string.Format("\"{0}\"", cdf_file_name));
+
+			if (no_sign == false)
+			{
+				CodeSign.SignFile(catname, catname, "Catalog File", false);
+			}
+
+			File.Delete(cdf_file_name);
+
+			File.Delete(makecat1);
+			File.Delete(makecat2);
+			File.Delete(makecat3);
+			File.Delete(makecat4);
+		}
+
+		public static void MakeDriverPackage()
+		{
+			int versionMajor, versionMinor, versionBuild;
+			string buildname;
+			DateTime date;
+			int i;
+
+			ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out buildname, out date);
+
+			date = date.AddDays(-1);
+
+			string dst_dir = Path.Combine(Paths.BaseDirName, @"tmp\MakeDriverPackage");
+			string src_dir = Path.Combine(Paths.BaseDirName, @"BuiltDriverPackages");
+			IO.DeleteFilesAndSubDirsInDir(dst_dir);
+			IO.MakeDirIfNotExists(dst_dir);
+
+			// Neo9x x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo9x\x86"));
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo9x\x86\Neo9x_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo9x\x86\Neo9x_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, null, false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Neo9x\x86\Neo9x_x86.sys"), Path.Combine(dst_dir, @"Neo9x\x86\Neo9x_x86.sys"));
+
+			// Neo x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo\x86"));
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo\x86\Neo_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo\x86\Neo_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, null, false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Neo\x86\Neo_x86.sys"), Path.Combine(dst_dir, @"Neo\x86\Neo_x86.sys"));
+
+			// Neo x64
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo\x64"));
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo\x64\Neo_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo\x64\Neo_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, null, false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Neo\x64\Neo_x64.sys"), Path.Combine(dst_dir, @"Neo\x64\Neo_x64.sys"));
+
+			// Neo6 x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6\x86"));
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6\x86\Neo6_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, null, false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86.sys"), Path.Combine(dst_dir, @"Neo6\x86\Neo6_x86.sys"));
+
+			// Neo6 x64
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6\x64"));
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6\x64\Neo6_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, null, false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64.sys"), Path.Combine(dst_dir, @"Neo6\x64\Neo6_x64.sys"));
+
+			// Neo6 for Windows 8 x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6_Win8\x86"));
+			List<string> cat_src_filename = new List<string>();
+			cat_src_filename.Add("Neo6_x86.sys");
+			for (i = 1; i < 128; i++)
+			{
+				string name = "VPN";
+				if (i >= 2)
+				{
+					name += i.ToString();
+				}
+				string sys_name = "Neo_" + name + ".sys";
+				IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6_Win8\x86\Neo6_x86_" + name + ".inf"),
+					process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86.inf")), versionMajor, versionMinor, versionBuild, date, sys_name, name, string.Format("inf_{0}.cat", name), true), Str.ShiftJisEncoding, false);
+				cat_src_filename.Add("Neo6_x86_" + name + ".inf");
+			}
+			IO.FileCopy(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86.sys"), Path.Combine(dst_dir, @"Neo6_Win8\x86\Neo6_x86.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Neo6_Win8\x86"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"Neo6_Win8\x86"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+
+			// Neo6 for Windows 8 x64
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6_Win8\x64"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("Neo6_x64.sys");
+			for (i = 1; i < 128; i++)
+			{
+				string name = "VPN";
+				if (i >= 2)
+				{
+					name += i.ToString();
+				}
+				string sys_name = "Neo_" + name + ".sys";
+				IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6_Win8\x64\Neo6_x64_" + name + ".inf"),
+					process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64.inf")), versionMajor, versionMinor, versionBuild, date, sys_name, name, string.Format("inf_{0}.cat", name), true), Str.ShiftJisEncoding, false);
+				cat_src_filename.Add("Neo6_x64_" + name + ".inf");
+			}
+			IO.FileCopy(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64.sys"), Path.Combine(dst_dir, @"Neo6_Win8\x64\Neo6_x64.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Neo6_Win8\x64"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"Neo6_Win8\x64"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+			
+			// Neo6 for Windows 10 x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6_Win10\x86"));
+			for (i = 1; i < 128; i++)
+			{
+				string name = "VPN";
+				if (i >= 2)
+				{
+					name += i.ToString();
+				}
+				cat_src_filename = new List<string>();
+				cat_src_filename.Add("Neo6_x86_" + name + ".sys");
+				string sys_name = "Neo6_x86_" + name + ".sys";
+				IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6_Win10\x86\Neo6_x86_" + name + ".inf"),
+					process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86.inf")), versionMajor, versionMinor, versionBuild, date, sys_name, name, string.Format("Neo6_x86_{0}.cat", name), true), Str.ShiftJisEncoding, false);
+				cat_src_filename.Add("Neo6_x86_" + name + ".inf");
+				IO.FileCopy(Path.Combine(src_dir, @"Neo6\x86\Neo6_x86_win10.sys"), Path.Combine(dst_dir, @"Neo6_Win10\x86\Neo6_x86_" + name + ".sys"));
+				make_cat_file(Path.Combine(dst_dir, @"Neo6_Win10\x86"), cat_src_filename.ToArray(), "Neo6_x86_" + name + ".cat", true, true);
+			}
+
+			// Neo6 for Windows 10 x64
+			IO.MakeDir(Path.Combine(dst_dir, @"Neo6_Win10\x64"));
+			for (i = 1; i < 128; i++)
+			{
+				string name = "VPN";
+				if (i >= 2)
+				{
+					name += i.ToString();
+				}
+				cat_src_filename = new List<string>();
+				cat_src_filename.Add("Neo6_x64_" + name + ".sys");
+				string sys_name = "Neo6_x64_" + name + ".sys";
+				IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Neo6_Win10\x64\Neo6_x64_" + name + ".inf"),
+					process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64.inf")), versionMajor, versionMinor, versionBuild, date, sys_name, name, string.Format("Neo6_x64_{0}.cat", name), true), Str.ShiftJisEncoding, false);
+				cat_src_filename.Add("Neo6_x64_" + name + ".inf");
+				IO.FileCopy(Path.Combine(src_dir, @"Neo6\x64\Neo6_x64_win10.sys"), Path.Combine(dst_dir, @"Neo6_Win10\x64\Neo6_x64_" + name + ".sys"));
+				make_cat_file(Path.Combine(dst_dir, @"Neo6_Win10\x64"), cat_src_filename.ToArray(), "Neo6_x64_" + name + ".cat", true, true);
+			}
+
+			IO.CopyDir(Path.Combine(src_dir, "See"), Path.Combine(dst_dir, "See"), null, false, false);
+
+			// SeLow x86 for Windows 8.1
+			IO.MakeDir(Path.Combine(dst_dir, @"SeLow_Win8\x86"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("SeLow_x86.sys");
+			cat_src_filename.Add("SeLow_x86.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"SeLow_Win8\x86\SeLow_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"SeLow\x86\SeLow_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "SeLow_Win8_x86.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"SeLow\x86\SeLow_x86.sys"), Path.Combine(dst_dir, @"SeLow_Win8\x86\SeLow_x86.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win8\x86"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win8\x86"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+
+			// SeLow x64 for Windows 8.1
+			IO.MakeDir(Path.Combine(dst_dir, @"SeLow_Win8\x64"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("SeLow_x64.sys");
+			cat_src_filename.Add("SeLow_x64.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"SeLow_Win8\x64\SeLow_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"SeLow\x64\SeLow_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "SeLow_Win8_x64.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"SeLow\x64\SeLow_x64.sys"), Path.Combine(dst_dir, @"SeLow_Win8\x64\SeLow_x64.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win8\x64"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win8\x64"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+
+			// SeLow x86 for Windows 10
+			IO.MakeDir(Path.Combine(dst_dir, @"SeLow_Win10\x86"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("SeLow_x86.sys");
+			cat_src_filename.Add("SeLow_x86.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"SeLow_Win10\x86\SeLow_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"SeLow\x86\SeLow_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "SeLow_Win10_x86.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"SeLow\x86\SeLow_x86_win10.sys"), Path.Combine(dst_dir, @"SeLow_Win10\x86\SeLow_x86.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win10\x86"), cat_src_filename.ToArray(), "SeLow_Win10_x86.cat", true, false);
+
+			// SeLow x64 for Windows 10
+			IO.MakeDir(Path.Combine(dst_dir, @"SeLow_Win10\x64"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("SeLow_x64.sys");
+			cat_src_filename.Add("SeLow_x64.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"SeLow_Win10\x64\SeLow_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"SeLow\x64\SeLow_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "SeLow_Win10_x64.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"SeLow\x64\SeLow_x64_win10.sys"), Path.Combine(dst_dir, @"SeLow_Win10\x64\SeLow_x64.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"SeLow_Win10\x64"), cat_src_filename.ToArray(), "SeLow_Win10_x64.cat", true, false);
+
+			// Wfp x86
+			IO.MakeDir(Path.Combine(dst_dir, @"Wfp\x86"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("pxwfp_x86.sys");
+			cat_src_filename.Add("pxwfp_x86.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Wfp\x86\pxwfp_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Wfp\x86\pxwfp_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "pxwfp_x86.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Wfp\x86\pxwfp_x86.sys"), Path.Combine(dst_dir, @"Wfp\x86\pxwfp_x86.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Wfp\x86"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"Wfp\x86"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+
+			// Wfp x64
+			IO.MakeDir(Path.Combine(dst_dir, @"Wfp\x64"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("pxwfp_x64.sys");
+			cat_src_filename.Add("pxwfp_x64.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Wfp\x64\pxwfp_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Wfp\x64\pxwfp_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "pxwfp_x64.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Wfp\x64\pxwfp_x64.sys"), Path.Combine(dst_dir, @"Wfp\x64\pxwfp_x64.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Wfp\x64"), cat_src_filename.ToArray(), "inf.cat", false, false);
+			make_cat_file(Path.Combine(dst_dir, @"Wfp\x64"), cat_src_filename.ToArray(), "inf2.cat", true, false);
+
+			// Wfp x86 for Windows 10
+			IO.MakeDir(Path.Combine(dst_dir, @"Wfp_Win10\x86"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("pxwfp_x86.sys");
+			cat_src_filename.Add("pxwfp_x86.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Wfp_Win10\x86\pxwfp_x86.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Wfp\x86\pxwfp_x86.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "pxwfp_Win10_x86.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Wfp\x86\pxwfp_x86_win10.sys"), Path.Combine(dst_dir, @"Wfp_Win10\x86\pxwfp_x86.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Wfp_Win10\x86"), cat_src_filename.ToArray(), "pxwfp_Win10_x86.cat", true, false);
+
+			// Wfp x64 for Windows 10
+			IO.MakeDir(Path.Combine(dst_dir, @"Wfp_Win10\x64"));
+			cat_src_filename = new List<string>();
+			cat_src_filename.Add("pxwfp_x64.sys");
+			cat_src_filename.Add("pxwfp_x64.inf");
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, @"Wfp_Win10\x64\pxwfp_x64.inf"),
+				process_inf_file(IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, @"Wfp\x64\pxwfp_x64.inf")), versionMajor, versionMinor, versionBuild, date, null, null, "pxwfp_Win10_x64.cat", false), Str.ShiftJisEncoding, false);
+			IO.FileCopy(Path.Combine(src_dir, @"Wfp\x64\pxwfp_x64_win10.sys"), Path.Combine(dst_dir, @"Wfp_Win10\x64\pxwfp_x64.sys"));
+			make_cat_file(Path.Combine(dst_dir, @"Wfp_Win10\x64"), cat_src_filename.ToArray(), "pxwfp_Win10_x64.cat", true, false);
+
+			string tmp_body = IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, "make_whql_submission.cm_"));
+			tmp_body = Str.ReplaceStr(tmp_body, "test_tag", Str.DateTimeToStrShort(DateTime.Now) + "_Build_" + versionBuild.ToString());
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, "make_whql_submission.cmd"), tmp_body, Str.ShiftJisEncoding);
+
+			IO.FileCopy(Path.Combine(src_dir, "2_merge_whql_sign.cm_"), Path.Combine(dst_dir, "2_merge_whql_sign.cm_"));
+
+			tmp_body = IO.ReadAllTextWithAutoGetEncoding(Path.Combine(src_dir, "Memo.txt"));
+			tmp_body = Str.ReplaceStr(tmp_body, "tag_ver", versionMajor.ToString() + "." + versionMinor.ToString());
+			tmp_body = Str.ReplaceStr(tmp_body, "tag_build", versionBuild.ToString());
+			IO.WriteAllTextWithEncoding(Path.Combine(dst_dir, "Memo.txt"), tmp_body, Str.ShiftJisEncoding);
+
+			Kernel.Run(Path.Combine(Env.WindowsDir, "explorer.exe"), "\"" + dst_dir + "\"");
 		}
 
 		// Sign for all binary files (series mode)
@@ -1072,7 +1459,3 @@ namespace BuildUtil
 		}
 	}
 }
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

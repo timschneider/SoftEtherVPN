@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -107,6 +122,7 @@
 #define	UNIX_LINUX_MAX_THREADS			200000000		// Maximum number of threads
 #define	UNIX_MAX_LOCKS					65536			// Maximum number of locks
 #define	UNIX_MAX_MEMORY					(2147483648UL)	// Maximum memory capacity
+#define	UNIX_MAX_MEMORY_64				((UINT64)((UINT64)65536ULL * (UINT64)2147483647ULL))	// Maximum memory capacity (64-bit)
 #define	UNIX_MAX_FD						(655360)		// Maximum number of FDs
 #define	UNIX_MAX_FD_MACOS				(10000)			// Maximum number of FDs (Mac OS X)
 #define	MAXIMUM_WAIT_OBJECTS			64				// Maximum number of select
@@ -125,6 +141,7 @@ typedef void (SERVICE_FUNCTION)();
 #define	UNIX_SVC_ARG_STOP				"stop"
 #define	UNIX_SVC_ARG_EXEC_SVC			"execsvc"
 #define	UNIX_ARG_EXIT					"exit"
+#define UNIX_SVC_ARG_FOREGROUND				"--foreground"
 
 #define	UNIX_SVC_MODE_START				1
 #define	UNIX_SVC_MODE_STOP				2
@@ -162,6 +179,7 @@ void *UnixFileOpen(char *name, bool write_mode, bool read_lock);
 void *UnixFileOpenW(wchar_t *name, bool write_mode, bool read_lock);
 void *UnixFileCreate(char *name);
 void *UnixFileCreateW(wchar_t *name);
+void *GetUnixio4Stdout();
 bool UnixFileWrite(void *pData, void *buf, UINT size);
 bool UnixFileRead(void *pData, void *buf, UINT size);
 void UnixFileClose(void *pData, bool no_flush);
@@ -186,7 +204,9 @@ void UnixAlert(char *msg, char *caption);
 void UnixAlertW(wchar_t *msg, wchar_t *caption);
 char *UnixGetProductId();
 void UnixSetHighPriority();
+void UnixSetHighOomScore();
 void UnixRestorePriority();
+UINT UnixGetNumberOfCpuInner();
 void *UnixNewSingleInstance(char *instance_name);
 void UnixFreeSingleInstance(void *data);
 void UnixGetMemInfo(MEMINFO *info);
@@ -196,16 +216,13 @@ void UnixExecSilent(char *cmd);
 void UnixDisableInterfaceOffload(char *name);
 void UnixSetEnableKernelEspProcessing(bool b);
 
+void UnixDisableCoreDump();
 void UnixSetThreadPriorityRealtime();
-void UnixSetThreadPriorityLow();
-void UnixSetThreadPriorityHigh();
-void UnixSetThreadPriorityIdle();
-void UnixRestoreThreadPriority();
-void UnixSetResourceLimit(UINT id, UINT value);
+void UnixSetResourceLimit(UINT id, UINT64 value);
+bool UnixIs64BitRlimSupported();
 UINT64 UnixGetTick64();
 void UnixSigChldHandler(int sig);
 void UnixCloseIO();
-void UnixDaemon(bool debug_mode);
 void UnixGetCurrentDir(char *dir, UINT size);
 void UnixGetCurrentDirW(wchar_t *dir, UINT size);
 bool UnixCheckExecAccess(char *name);
@@ -214,7 +231,6 @@ DIRLIST *UnixEnumDirEx(char *dirname, COMPARE *compare);
 DIRLIST *UnixEnumDirExW(wchar_t *dirname, COMPARE *compare);
 bool UnixGetDiskFreeMain(char *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
 bool UnixGetDiskFree(char *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
-bool UnixGetDiskFreeW(wchar_t *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
 void UnixInitSolarisSleep();
 void UnixFreeSolarisSleep();
 void UnixSolarisSleep(UINT msec);
@@ -233,7 +249,6 @@ UINT UnixReadPidFile();
 UINT UnixReadCtlFile();
 bool UnixIsProcess(UINT pid);
 bool UnixWaitProcessEx(UINT pid, UINT timeout);
-void UnixWaitProcess(UINT pid);
 void UnixDeletePidFile();
 void UnixDeleteCtlFile();
 void UnixStopThread(THREAD *t, void *param);
@@ -248,7 +263,3 @@ bool UnixIsInVm();
 
 #endif	// OS_UNIX
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -3,15 +3,15 @@
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -113,6 +128,11 @@
 // <INFO> tags of the URL in the access list
 #define	ACCESS_LIST_URL_INFO_TAG					"<INFO>"
 
+// Old MAC address entry flush interval
+#define	OLD_MAC_ADDRESS_ENTRY_FLUSH_INTERVAL		1000
+
+// Default flooding queue length
+#define	DEFAULT_FLOODING_QUEUE_LENGTH				(32 * 1024 * 1024)
 
 // SoftEther link control packet
 struct SE_LINK
@@ -245,6 +265,7 @@ struct HUB_OPTION
 	UINT SecureNAT_MaxIcmpSessionsPerIp;	// Maximum number of ICMP sessions per IP address
 	UINT AccessListIncludeFileCacheLifetime;	// Expiration of the access list external file (in seconds)
 	bool DisableKernelModeSecureNAT;			// Disable the kernel mode NAT
+	bool DisableIpRawModeSecureNAT;			// Disable the IP Raw Mode NAT
 	bool DisableUserModeSecureNAT;			// Disable the user mode NAT
 	bool DisableCheckMacOnLocalBridge;	// Disable the MAC address verification in local bridge
 	bool DisableCorrectIpOffloadChecksum;	// Disable the correction of checksum that is IP-Offloaded
@@ -253,6 +274,15 @@ struct HUB_OPTION
 	bool DoNotSaveHeavySecurityLogs;	// Do not take heavy security log
 	bool DropBroadcastsInPrivacyFilterMode;	// Drop broadcasting packets if the both source and destination session is PrivacyFilter mode
 	bool DropArpInPrivacyFilterMode;	// Drop ARP packets if the both source and destination session is PrivacyFilter mode
+	bool SuppressClientUpdateNotification;	// Suppress the update notification function on the VPN Client
+	UINT FloodingSendQueueBufferQuota;	// The global quota of send queues of flooding packets
+	bool AssignVLanIdByRadiusAttribute;	// Assign the VLAN ID for the VPN session, by the attribute value of RADIUS
+	bool DenyAllRadiusLoginWithNoVlanAssign;	// Deny all RADIUS login with no VLAN ID assigned
+	bool SecureNAT_RandomizeAssignIp;	// Randomize the assignment IP address for new DHCP client
+	UINT DetectDormantSessionInterval;	// Interval (seconds) threshold to detect a dormant VPN session
+	bool NoPhysicalIPOnPacketLog;		// Disable saving physical IP address on the packet log
+	bool UseHubNameAsDhcpUserClassOption;	// Add HubName to DHCP request as User-Class option
+	bool UseHubNameAsRadiusNasId;		// Add HubName to Radius request as NAS-Identifier attrioption
 };
 
 // MAC table entry
@@ -318,7 +348,7 @@ struct ACCESS
 	UCHAR DstMacAddress[6];				// Destination MAC address
 	UCHAR DstMacMask[6];				// Destination MAC address mask
 	bool CheckTcpState;					// The state of the TCP connection
-	bool Established;					// Establieshed(TCP)
+	bool Established;					// Established(TCP)
 	UINT Delay;							// Delay
 	UINT Jitter;						// Jitter
 	UINT Loss;							// Packet loss
@@ -408,6 +438,9 @@ struct HUB
 	UINT RadiusRetryInterval;			// Radius retry interval
 	BUF *RadiusSecret;					// Radius shared key
 	char RadiusSuffixFilter[MAX_SIZE];	// Radius suffix filter
+	char RadiusRealm[MAX_SIZE];			// Radius realm (optional)
+	bool RadiusConvertAllMsChapv2AuthRequestToEap;	// Convert all MS-CHAPv2 auth request to EAP
+	bool RadiusUsePeapInsteadOfEap;			// Use PEAP instead of EAP
 	volatile bool Halt;					// Halting flag
 	bool Offline;						// Offline
 	bool BeingOffline;					// Be Doing Offline
@@ -420,7 +453,7 @@ struct HUB
 	COUNTER *NumSessionsClient;			// The current number of sessions (client)
 	COUNTER *NumSessionsBridge;			// The current number of sessions (bridge)
 	HUB_OPTION *Option;					// HUB options
-	LIST *MacTable;						// MAC address table
+	HASH_LIST *MacHashTable;			// MAC address hash table
 	LIST *IpTable;						// IP address table
 	LIST *MonitorList;					// Monitor port session list
 	LIST *LinkList;						// Linked list
@@ -464,6 +497,10 @@ struct HUB
 	wchar_t *Msg;						// Message to be displayed when the client is connected
 	LIST *UserList;						// Cache of the user list file
 	bool IsVgsHub;						// Whether it's a VGS Virtual HUB
+	bool IsVgsSuperRelayHub;			// Whether it's a VGS Super Relay Virtual HUB
+	UINT64 LastFlushTick;				// Last tick to flush the MAC address table
+	bool StopAllLinkFlag;				// Stop all link flag
+	bool ForceDisableComm;				// Disable the communication function
 };
 
 
@@ -504,12 +541,12 @@ UINT HubPaGetNextPacket(SESSION *s, void **data);
 bool HubPaPutPacket(SESSION *s, void *data, UINT size);
 PACKET_ADAPTER *GetHubPacketAdapter();
 int CompareMacTable(void *p1, void *p2);
+UINT GetHashOfMacTable(void *p);
 void StorePacket(HUB *hub, SESSION *s, PKT *packet);
 bool StorePacketFilter(SESSION *s, PKT *packet);
-void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *packet);
+void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *packet, bool is_flooding, bool no_check_acl);
 void SetHubOnline(HUB *h);
 void SetHubOffline(HUB *h);
-SESSION *GetSessionByPtr(HUB *hub, void *ptr);
 SESSION *GetSessionByName(HUB *hub, char *name);
 int CompareIpTable(void *p1, void *p2);
 bool StorePacketFilterByPolicy(SESSION *s, PKT *p);
@@ -528,7 +565,6 @@ void InitAccessList(HUB *hub);
 void FreeAccessList(HUB *hub);
 void AddAccessList(HUB *hub, ACCESS *a);
 void AddAccessListEx(HUB *hub, ACCESS *a, bool no_sort, bool no_reassign_id);
-bool SetSessionFirstRedirectHttpUrl(SESSION *s, char *url);
 bool IsTcpPacketNcsiHttpAccess(PKT *p);
 UINT64 UsernameToInt64(char *name);
 void MakeSimpleUsernameRemoveNtDomain(char *dst, UINT dst_size, char *src);
@@ -549,7 +585,7 @@ void GetHubLogSetting(HUB *h, HUB_LOG *setting);
 void SetHubLogSetting(HUB *h, HUB_LOG *setting);
 void SetHubLogSettingEx(HUB *h, HUB_LOG *setting, bool no_change_switch_type);
 void DeleteExpiredIpTableEntry(LIST *o);
-void DeleteExpiredMacTableEntry(LIST *o);
+void DeleteExpiredMacTableEntry(HASH_LIST *h);
 void AddTrafficDiff(HUB *h, char *name, UINT type, TRAFFIC *traffic);
 void IncrementHubTraffic(HUB *h);
 void EnableSecureNAT(HUB *h, bool enable);
@@ -600,16 +636,9 @@ USERLIST *FindUserList(LIST *o, char *filename);
 bool IsUserMatchInUserList(LIST *o, char *filename, UINT64 user_hash);
 bool IsUserMatchInUserListWithCacheExpires(LIST *o, char *filename, UINT64 user_hash, UINT64 lifetime);
 bool IsUserMatchInUserListWithCacheExpiresAcl(LIST *o, char *name_in_acl, UINT64 user_hash, UINT64 lifetime);
-void CalcTrafficEntryDiff(TRAFFIC_ENTRY *diff, TRAFFIC_ENTRY *old, TRAFFIC_ENTRY *current);
-void CalcTrafficDiff(TRAFFIC *diff, TRAFFIC *old, TRAFFIC *current);
 bool CheckMaxLoggedPacketsPerMinute(SESSION *s, UINT max_packets, UINT64 now);
-void VgsSetUserAgentValue(char *str);
-void VgsSetEmbTag(bool b);
+EAP_CLIENT *HubNewEapClient(CEDAR *cedar, char *hubname, char *client_ip_str, char *username);
 
 #endif	// HUB_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

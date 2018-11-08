@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -314,7 +329,7 @@ void NnDeleteSession(NATIVE_NAT *t, NATIVE_NAT_ENTRY *e)
 		break;
 
 	case NAT_ICMP:
-		Debug("NAT ICMP %u Deleted.", e->Id);
+		Debug("NAT ICMP %u Deleted.\n", e->Id);
 		break;
 	}
 
@@ -421,7 +436,7 @@ void NnCombineIp(NATIVE_NAT *t, IP_COMBINE *c, UINT offset, void *data, UINT siz
 
 	if (last_packet)
 	{
-		// If No More Flagment packet arrives, the size of this datagram is finalized
+		// If No More Fragment packet arrives, the size of this datagram is finalized
 		c->Size = offset + size;
 	}
 
@@ -494,6 +509,7 @@ void NnCombineIp(NATIVE_NAT *t, IP_COMBINE *c, UINT offset, void *data, UINT siz
 		if (total_size == c->Size)
 		{
 			// Received whole of the IP packet
+			//Debug("Combine: %u\n", total_size);
 			NnIpReceived(t, c->SrcIP, c->DestIP, c->Protocol, c->Data, c->Size, c->Ttl,
 				c->HeadIpHeaderData, c->HeadIpHeaderDataSize, c->MaxL3Size);
 
@@ -1056,9 +1072,9 @@ void NnFragmentedIpReceived(NATIVE_NAT *t, PKT *packet)
 			c = NnInsertIpCombine(
 				t, ip->SrcIP, ip->DstIP, Endian16(ip->Identification), ip->Protocol, packet->BroadcastPacket,
 				ip->TimeToLive, false);
-			c->MaxL3Size = MAX(c->MaxL3Size, l3_size);
 			if (c != NULL)
 			{
+				c->MaxL3Size = MAX(c->MaxL3Size, l3_size);
 				NnCombineIp(t, c, offset, data, size, last_packet, head_ip_header_data, head_ip_header_size);
 			}
 		}
@@ -1162,7 +1178,7 @@ void NnIpSendFragmentedForInternet(NATIVE_NAT *t, UCHAR ip_protocol, UINT src_ip
 	ip->TypeOfService = DEFAULT_IP_TOS;
 	ip->TotalLength = Endian16((USHORT)(size + IP_HEADER_SIZE));
 	ip->Identification = Endian16(id);
-	ip->FlagsAndFlagmentOffset[0] = ip->FlagsAndFlagmentOffset[1] = 0;
+	ip->FlagsAndFragmentOffset[0] = ip->FlagsAndFragmentOffset[1] = 0;
 	IPV4_SET_OFFSET(ip, (offset / 8));
 	if ((offset + size) >= total_size)
 	{
@@ -1636,24 +1652,32 @@ UINT NnMapNewPublicPort(NATIVE_NAT *t, UINT protocol, UINT dest_ip, UINT dest_po
 {
 	UINT i;
 	UINT base_port;
+	UINT port_start = 1025;
+	UINT port_end = 65500;
 	// Validate arguments
 	if (t == NULL)
 	{
 		return 0;
 	}
 
-	base_port = Rand32() % (65500 - 1025) + 1025;
+	if (t->IsRawIpMode)
+	{
+		port_start = NN_RAW_IP_PORT_START;
+		port_end = NN_RAW_IP_PORT_END;
+	}
 
-	for (i = 0;i < (65500 - 1025);i++)
+	base_port = Rand32() % (port_end - port_start) + port_start;
+
+	for (i = 0;i < (port_end - port_start);i++)
 	{
 		UINT port;
 		NATIVE_NAT_ENTRY tt;
 		NATIVE_NAT *e;
 
 		port = base_port + i;
-		if (port > 65500)
+		if (port > port_end)
 		{
-			port = port - 65500 + 1025;
+			port = port - port_end + port_start;
 		}
 
 		// Is this port vacant?
@@ -1674,6 +1698,10 @@ UINT NnMapNewPublicPort(NATIVE_NAT *t, UINT protocol, UINT dest_ip, UINT dest_po
 // Examine whether the native NAT is available
 bool NnIsActive(VH *v)
 {
+	return NnIsActiveEx(v, NULL);
+}
+bool NnIsActiveEx(VH *v, bool *is_ipraw_mode)
+{
 	// Validate arguments
 	if (v == NULL)
 	{
@@ -1688,6 +1716,14 @@ bool NnIsActive(VH *v)
 	if (v->NativeNat->PublicIP == 0)
 	{
 		return false;
+	}
+
+	if (v->NativeNat->Active)
+	{
+		if (is_ipraw_mode != NULL)
+		{
+			*is_ipraw_mode = v->NativeNat->IsRawIpMode;
+		}
 	}
 
 	return v->NativeNat->Active;
@@ -1730,7 +1766,7 @@ void NnMainLoop(NATIVE_NAT *t, NATIVE_STACK *a)
 	ipc = a->Ipc;
 
 	tubes[num_tubes++] = ipc->Sock->RecvTube;
-	tubes[num_tubes++] = ipc->Sock->SendTube;
+	//tubes[num_tubes++] = ipc->Sock->SendTube;	// bug 2015.10.01 remove
 	tubes[num_tubes++] = t->HaltTube;
 
 	Zero(&yahoo_ip, sizeof(yahoo_ip));
@@ -1739,15 +1775,27 @@ void NnMainLoop(NATIVE_NAT *t, NATIVE_STACK *a)
 	AddInterrupt(interrupt, next_poll_tick);
 
 	tcp_last_recv_tick = Tick64();
-	next_dhcp_renew_tick = Tick64() + (UINT64)dhcp_renew_interval;
+	next_dhcp_renew_tick = Tick64() + (UINT64)dhcp_renew_interval * 1000;
 	AddInterrupt(interrupt, next_dhcp_renew_tick);
 
-	while (t->Halt == false && t->v->UseNat && ((t->v->HubOption == NULL) || (t->v->HubOption->DisableKernelModeSecureNAT == false)))
+	while (t->Halt == false && t->v->UseNat)
 	{
 		UINT64 now = Tick64();
 		bool call_cancel = false;
 		bool state_changed = false;
 		UINT wait_interval;
+
+		if (t->v->HubOption != NULL)
+		{
+			if (t->IsRawIpMode == false && t->v->HubOption->DisableKernelModeSecureNAT)
+			{
+				break;
+			}
+			if (t->IsRawIpMode && t->v->HubOption->DisableIpRawModeSecureNAT)
+			{
+				break;
+			}
+		}
 
 		IPCFlushArpTable(ipc);
 		call_cancel = false;
@@ -1759,7 +1807,7 @@ LABEL_RESTART:
 		{
 			BUF *dns_query;
 
-			dns_src_port = NnGenSrcPort();
+			dns_src_port = NnGenSrcPort(a->IsIpRawMode);
 			dns_tran_id = Rand16();
 
 			// Start a connectivity check periodically
@@ -1785,7 +1833,7 @@ LABEL_RESTART:
 
 			IPCDhcpRenewIP(ipc, &ip);
 
-			next_dhcp_renew_tick = now + (UINT64)dhcp_renew_interval;
+			next_dhcp_renew_tick = now + (UINT64)dhcp_renew_interval * 1000;
 			AddInterrupt(interrupt, next_dhcp_renew_tick);
 		}
 
@@ -1862,7 +1910,7 @@ LABEL_RESTART:
 										// DNS response has been received
 										no_store = true;
 
-										tcp_src_port = NnGenSrcPort();
+										tcp_src_port = NnGenSrcPort(a->IsIpRawMode);
 
 										// Generate a TCP connection attempt packet
 										tcp_seq = Rand32();
@@ -1947,12 +1995,9 @@ LABEL_RESTART:
 			}
 			Unlock(t->CancelLock);
 
-			if (c != NULL)
-			{
-				Cancel(c);
+			Cancel(c);
 
-				ReleaseCancel(c);
-			}
+			ReleaseCancel(c);
 		}
 
 		if (IsTubeConnected(ipc->Sock->RecvTube) == false || IsTubeConnected(ipc->Sock->SendTube) == false)
@@ -2202,6 +2247,7 @@ BUF *NnReadDnsRecord(BUF *buf, bool answer, USHORT *ret_type, USHORT *ret_class)
 		data = Malloc(data_len);
 		if (ReadBuf(buf, data, data_len) != data_len)
 		{
+			Free(data);
 			return false;
 		}
 
@@ -2332,20 +2378,47 @@ LABEL_CLEANUP:
 bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 {
 	BUF *dns_query;
+	BUF *dns_query2;
 	bool ok = false;
 	USHORT dns_tran_id = Rand16();
 	UINT64 next_send_tick = 0;
 	UINT64 giveup_time;
 	IPC *ipc;
-	UINT src_port = NnGenSrcPort();
 	INTERRUPT_MANAGER *interrupt;
 	TUBE *tubes[3];
 	UINT num_tubes = 0;
 	IP yahoo_ip;
+	IP my_priv_ip;
+	UINT num_send_dns = 0;
+	IP using_dns;
+	UINT src_port = 0;
 	// Validate arguments
 	if (a == NULL)
 	{
 		return false;
+	}
+
+	src_port = NnGenSrcPort(a->IsIpRawMode);
+
+	Copy(&using_dns, &a->DnsServerIP, sizeof(IP));
+
+	// Get my physical IP
+	if (a->IsIpRawMode)
+	{
+		if (GetMyPrivateIP(&my_priv_ip, false) == false)
+		{
+			Debug("NnTestConnectivity: GetMyPrivateIP failed.\n");
+			return false;
+		}
+		else
+		{
+			Debug("NnTestConnectivity: GetMyPrivateIP ok: %r\n", &my_priv_ip);
+
+			if (a->Eth != NULL)
+			{
+				Copy(&a->Eth->MyPhysicalIPForce, &my_priv_ip, sizeof(IP));
+			}
+		}
 	}
 
 	ipc = a->Ipc;
@@ -2365,6 +2438,10 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 	dns_query = NnBuildIpPacket(NnBuildUdpPacket(NnBuildDnsQueryPacket(NN_CHECK_HOSTNAME, dns_tran_id),
 		IPToUINT(&ipc->ClientIPAddress), src_port, IPToUINT(&a->DnsServerIP), 53),
 		IPToUINT(&ipc->ClientIPAddress), IPToUINT(&a->DnsServerIP), IP_PROTO_UDP, 0);
+
+	dns_query2 = NnBuildIpPacket(NnBuildUdpPacket(NnBuildDnsQueryPacket(NN_CHECK_HOSTNAME, dns_tran_id),
+		IPToUINT(&ipc->ClientIPAddress), src_port, IPToUINT(&a->DnsServerIP), 53),
+		IPToUINT(&ipc->ClientIPAddress), IPToUINT(&a->DnsServerIP2), IP_PROTO_UDP, 0);
 
 	giveup_time = Tick64() + NN_CHECK_CONNECTIVITY_TIMEOUT;
 	AddInterrupt(interrupt, giveup_time);
@@ -2386,7 +2463,16 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 
 			AddInterrupt(interrupt, next_send_tick);
 
-			IPCSendIPv4(ipc, dns_query->Buf, dns_query->Size);
+			if ((num_send_dns % 2) == 0)
+			{
+				IPCSendIPv4(ipc, dns_query->Buf, dns_query->Size);
+			}
+			else
+			{
+				IPCSendIPv4(ipc, dns_query2->Buf, dns_query2->Size);
+			}
+
+			num_send_dns++;
 		}
 
 		// Happy processing
@@ -2409,7 +2495,8 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 			if (pkt != NULL)
 			{
 				if (pkt->TypeL3 == L3_IPV4 && pkt->TypeL4 == L4_UDP &&
-					pkt->L3.IPv4Header->SrcIP == IPToUINT(&a->DnsServerIP) &&
+					(pkt->L3.IPv4Header->SrcIP == IPToUINT(&a->DnsServerIP) ||
+					 pkt->L3.IPv4Header->SrcIP == IPToUINT(&a->DnsServerIP2)) &&
 					pkt->L3.IPv4Header->DstIP == IPToUINT(&ipc->ClientIPAddress) &&
 					pkt->L4.UDPHeader->SrcPort == Endian16(53) && pkt->L4.UDPHeader->DstPort == Endian16(src_port))
 				{
@@ -2422,6 +2509,9 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 
 							if (NnParseDnsResponsePacket(pkt->Payload, pkt->PayloadSize, &ret_ip))
 							{
+								UINTToIP(&using_dns, pkt->L3.IPv4Header->SrcIP);
+								Debug("NativeStack: Using DNS: %r\n", &using_dns);
+
 								Copy(&yahoo_ip, &ret_ip, sizeof(IP));
 							}
 						}
@@ -2451,6 +2541,7 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 	}
 
 	FreeBuf(dns_query);
+	FreeBuf(dns_query2);
 
 	if (IsZeroIP(&yahoo_ip) == false)
 	{
@@ -2574,13 +2665,37 @@ bool NnTestConnectivity(NATIVE_STACK *a, TUBE *halt_tube)
 
 	FreeInterruptManager(interrupt);
 
+	if (ok)
+	{
+		if (IsZeroIP(&using_dns) == false)
+		{
+			Copy(&a->DnsServerIP, &using_dns, sizeof(IP));
+		}
+
+		if (a->IsIpRawMode)
+		{
+			if (NsStartIpTablesTracking(a) == false)
+			{
+				Debug("NsStartIpTablesTracking failed.\n");
+				ok = false;
+			}
+		}
+	}
+
 	return ok;
 }
 
 // Generate source port number by a random number
-UINT NnGenSrcPort()
+UINT NnGenSrcPort(bool raw_ip_mode)
 {
-	return 1025 + Rand32() % (65500 - 1025);
+	if (raw_ip_mode == false)
+	{
+		return 1025 + Rand32() % (65500 - 1025);
+	}
+	else
+	{
+		return NN_RAW_IP_PORT_START + Rand32() % (NN_RAW_IP_PORT_END - NN_RAW_IP_PORT_START);
+	}
 }
 
 // Get a next good interface for the native NAT
@@ -2602,7 +2717,9 @@ NATIVE_STACK *NnGetNextInterface(NATIVE_NAT *t)
 	t->NextWaitTimeForRetry = NN_NEXT_WAIT_TIME_FOR_DEVICE_ENUM * MIN((t->FailedCount + 1), NN_NEXT_WAIT_TIME_MAX_FAIL_COUNT);
 
 	// Get the device list
-	device_list = GetEthList();
+	device_list = GetEthListEx(NULL,
+		!(t->v->HubOption != NULL && t->v->HubOption->DisableKernelModeSecureNAT),
+		!(t->v->HubOption != NULL && t->v->HubOption->DisableIpRawModeSecureNAT));
 
 	if (device_list == NULL || device_list->NumTokens == 0)
 	{
@@ -2705,10 +2822,16 @@ NATIVE_STACK *NnGetNextInterface(NATIVE_NAT *t)
 
 				// Determine the DNS server to use
 				UINTToIP(&ret->DnsServerIP, opt.DnsServer);
+				UINTToIP(&ret->DnsServerIP2, opt.DnsServer2);
 				if (IsZeroIP(&ret->DnsServerIP))
 				{
 					// Use 8.8.8.8 instead If the DNS is not assigned from the DHCP server
 					SetIP(&ret->DnsServerIP, 8, 8, 8, 8);
+				}
+				if (IsZeroIP(&ret->DnsServerIP2))
+				{
+					// Use 8.8.4.4 instead If the DNS is not assigned from the DHCP server
+					SetIP(&ret->DnsServerIP2, 8, 8, 4, 4);
 				}
 
 				// Connectivity test
@@ -2758,7 +2881,7 @@ void NativeNatThread(THREAD *thread, void *param)
 	{
 		NATIVE_STACK *a;
 
-		while (t->v->UseNat == false || (t->v->HubOption != NULL && t->v->HubOption->DisableKernelModeSecureNAT))
+		while (t->v->UseNat == false || t->v->HubOption == NULL || (t->v->HubOption->DisableKernelModeSecureNAT && t->v->HubOption->DisableIpRawModeSecureNAT))
 		{
 			if (t->Halt)
 			{
@@ -2787,6 +2910,8 @@ void NativeNatThread(THREAD *thread, void *param)
 			// Acquisition success
 			Debug("NnGetNextInterface Ok: %s\n", a->DeviceName);
 
+			t->IsRawIpMode = a->IsIpRawMode;
+
 			Lock(t->Lock);
 			{
 				if (a->Sock1 != NULL)
@@ -2814,6 +2939,8 @@ void NativeNatThread(THREAD *thread, void *param)
 				macstr, &a->CurrentDhcpOptionList.ServerAddress, &a->DnsServerIP);
 			NnMainLoop(t, a);
 			Debug("NnMainLoop End.\n");
+
+			t->IsRawIpMode = false;
 
 			t->Active = false;
 			t->PublicIP = 0;
@@ -3870,14 +3997,16 @@ bool NatTransactIcmp(VH *v, NAT_ENTRY *n)
 	void *buf;
 	UINT recv_size;
 	BLOCK *block;
-	UINT dest_port = n->DestPort;
 	IP dest_ip;
 	UINT num_ignore_errors = 0;
+	UINT dest_port = 0;
 	// Validate arguments
 	if (v == NULL || n == NULL)
 	{
 		return true;
 	}
+
+	dest_port = n->DestPort;
 
 	if (n->DisconnectNow)
 	{
@@ -4073,14 +4202,16 @@ bool NatTransactUdp(VH *v, NAT_ENTRY *n)
 	void *buf;
 	UINT recv_size;
 	BLOCK *block;
-	UINT dest_port = n->DestPort;
 	IP dest_ip;
 	UINT num_ignore_errors;
+	UINT dest_port = 0;
 	// Validate arguments
 	if (v == NULL || n == NULL)
 	{
 		return true;
 	}
+
+	dest_port = n->DestPort;
 
 	if (n->DisconnectNow)
 	{
@@ -4297,7 +4428,7 @@ void NatTcpConnectThread(THREAD *t, void *p)
 
 	// Attempt to connect to the TCP host
 	Debug("NatTcpConnect Connecting to %s:%u\n", hostname, port_number);
-	sock = ConnectEx3(hostname, port_number, 0, &n->NatTcpCancelFlag, NULL, NULL, false, false, true);
+	sock = ConnectEx3(hostname, port_number, 0, &n->NatTcpCancelFlag, NULL, NULL, false, true);
 	if (sock == NULL)
 	{
 		// Connection failure
@@ -4417,6 +4548,16 @@ bool NatTransactTcp(VH *v, NAT_ENTRY *n)
 					// Successful transmission
 					ReadFifo(n->RecvFifo, NULL, sent_size);
 					n->SendAckNext = true;
+
+					if (false)
+					{
+						IP ip;
+
+						n->test_TotalSent += sent_size;
+
+						UINTToIP(&ip, n->DestIp);
+						Debug("TCP %u: %r:%u %u\n", n->Id, &ip, n->DestPort, (UINT)n->test_TotalSent);
+					}
 				}
 			}
 
@@ -4445,6 +4586,11 @@ bool NatTransactTcp(VH *v, NAT_ENTRY *n)
 					// Communication has been disconnected
 					n->TcpFinished = true;
 					v->NatDoCancelFlag = true;
+					if (n->TcpDisconnected == false)
+					{
+						Disconnect(n->Sock);
+						n->TcpDisconnected = true;
+					}
 					break;
 				}
 				else if (recv_size == SOCK_LATER)
@@ -4720,7 +4866,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 
 	case NAT_TCP_SEND_RESET:		// Reset the connection
 		// Send a RST
-		if (n->TcpFinished == false)
+		if (n->TcpFinished == false || n->TcpForceReset)
 		{
 			SendTcp(v, n->DestIp, n->DestPort, n->SrcIp, n->SrcPort,
 				(UINT)(n->SendSeq + n->SendSeqInit),
@@ -4742,6 +4888,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 					TCP_ACK | TCP_FIN, 0,
 					0, NULL, 0);
 				n->FinSentTime = v->Now;
+				n->FinSentSeq = (UINT)(n->SendSeq + n->SendSeqInit);
 				n->FinSentCount++;
 				if (n->FinSentCount >= NAT_FIN_SEND_MAX_COUNT)
 				{
@@ -4859,7 +5006,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 			if (n->TcpFinished)
 			{
 				// Disconnect if all data transmission has completed
-				if (n->SendFifo->size == 0)
+				if (n->SendFifo->size == 0 && n->RecvFifo->size == 0)
 				{
 					n->TcpStatus = NAT_TCP_SEND_RESET;
 				}
@@ -4959,6 +5106,16 @@ void TcpRecvForInternet(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT de
 	switch (n->TcpStatus)
 	{
 	case NAT_TCP_SEND_RESET:		// Disconnect the connection by sending a RST
+		if ((tcp->Flag & TCP_ACK) && ((tcp->Flag & TCP_SYN) == false))
+		{
+			if (n->FinSentCount >= 1)
+			{
+				if (ack == (n->FinSentSeq + 1))
+				{
+					n->TcpForceReset = true;
+				}
+			}
+		}
 		break;
 
 	case NAT_TCP_CONNECTED:			// Socket connection completion: SYN + ACK, ACK processing
@@ -5150,7 +5307,7 @@ TCP_RESET:
 			seq64 = n->RecvSeq + (UINT64)seq - (n->RecvSeqInit + n->RecvSeq) % X32;
 			if ((n->RecvSeqInit + n->RecvSeq) % X32 > seq)
 			{
-				if (((n->RecvSeqInit + n->RecvSeq) % X32 - ack) >= 0x80000000)
+				if (((n->RecvSeqInit + n->RecvSeq) % X32 - seq) >= 0x80000000)
 				{
 					seq64 = n->RecvSeq + (UINT64)seq + X32 - (n->RecvSeqInit + n->RecvSeq) % X32;
 				}
@@ -5276,7 +5433,7 @@ SCAN_FIRST:
 void ParseTcpOption(TCP_OPTION *o, void *data, UINT size)
 {
 	UCHAR *buf = (UCHAR *)data;
-	UINT i;
+	UINT i = 0;
 	UINT value_size = 0;
 	UINT value_id = 0;
 	UCHAR value[128];
@@ -5288,13 +5445,18 @@ void ParseTcpOption(TCP_OPTION *o, void *data, UINT size)
 
 	Zero(o, sizeof(TCP_OPTION));
 
-	for (i = 0;i < size;i++)
+	while(i < size)
 	{
 		if (buf[i] == 0)
 		{
 			return;
 		}
-		if (buf[i] != 1)
+		else if (buf[i] == 1)
+		{
+			i++;
+			continue;
+		}
+		else
 		{
 			value_id = buf[i];
 			i++;
@@ -5313,12 +5475,14 @@ void ParseTcpOption(TCP_OPTION *o, void *data, UINT size)
 				return;
 			}
 			value_size -= 2;
+                   
 			Copy(value, &buf[i], value_size);
 			i += value_size;
-			if (i >= size)
+			if (i > size)
 			{
 				return;
 			}
+
 			switch (value_id)
 			{
 			case 2:	// MSS
@@ -5333,14 +5497,13 @@ void ParseTcpOption(TCP_OPTION *o, void *data, UINT size)
 				if (value_size == 1)
 				{
 					UCHAR *wss = (UCHAR *)value;
-					o->WindowScaling = Endian16(*wss);
+					o->WindowScaling = *wss;
 				}
 				break;
 
 			}
 		}
 	}
-
 }
 
 // Create a new NAT TCP session
@@ -6790,104 +6953,6 @@ NAT_ENTRY *CreateNatDns(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT de
 	return n;
 }
 
-// Get the next byte
-UCHAR GetNextByte(BUF *b)
-{
-	UCHAR c = 0;
-	// Validate arguments
-	if (b == NULL)
-	{
-		return 0;
-	}
-
-	if (ReadBuf(b, &c, 1) != 1)
-	{
-		return 0;
-	}
-
-	return c;
-}
-
-// Interpret the DNS query
-bool ParseDnsQuery(char *name, UINT name_size, void *data, UINT data_size)
-{
-	BUF *b;
-	char tmp[257];
-	bool ok = true;
-	USHORT val;
-	// Validate arguments
-	if (name == NULL || data == NULL || data_size == 0)
-	{
-		return false;
-	}
-	StrCpy(name, name_size, "");
-
-	b = NewBuf();
-	WriteBuf(b, data, data_size);
-	SeekBuf(b, 0, 0);
-
-	while (true)
-	{
-		UINT next_len = (UINT)GetNextByte(b);
-		if (next_len > 0)
-		{
-			// Read only the specified length
-			Zero(tmp, sizeof(tmp));
-			if (ReadBuf(b, tmp, next_len) != next_len)
-			{
-				ok = false;
-				break;
-			}
-			// Append
-			if (StrLen(name) != 0)
-			{
-				StrCat(name, name_size, ".");
-			}
-			StrCat(name, name_size, tmp);
-		}
-		else
-		{
-			// Read all
-			break;
-		}
-	}
-
-	if (ReadBuf(b, &val, sizeof(val)) != sizeof(val))
-	{
-		ok = false;
-	}
-	else
-	{
-		if (Endian16(val) != 0x01 && Endian16(val) != 0x0c)
-		{
-			ok = false;
-		}
-	}
-
-	if (ReadBuf(b, &val, sizeof(val)) != sizeof(val))
-	{
-		ok = false;
-	}
-	else
-	{
-		if (Endian16(val) != 0x01)
-		{
-			ok = false;
-		}
-	}
-
-	FreeBuf(b);
-
-	if (ok == false || StrLen(name) == 0)
-	{
-		return false;
-	}
-	else
-	{
-		return true;
-	}
-}
-
 // Set the VGS host name
 void SetDnsProxyVgsHostname(char *hostname)
 {
@@ -7384,6 +7449,8 @@ void VirtualIcmpEchoRequestReceived(VH *v, UINT src_ip, UINT dst_ip, void *data,
 		return;
 	}
 
+	//Debug("ICMP: %u\n", size);
+
 	if (NnIsActive(v))
 	{
 		// Process by the Native NAT
@@ -7567,7 +7634,7 @@ void CombineIp(VH *v, IP_COMBINE *c, UINT offset, void *data, UINT size, bool la
 
 	if (last_packet)
 	{
-		// If No More Flagment packet arrives, the size of this datagram is finalized
+		// If No More Fragment packet arrives, the size of this datagram is finalized
 		c->Size = offset + size;
 	}
 
@@ -8777,7 +8844,7 @@ void SendFragmentedIp(VH *v, UINT dest_ip, UINT src_ip, USHORT id, USHORT total_
 	ip->TypeOfService = DEFAULT_IP_TOS;
 	ip->TotalLength = Endian16((USHORT)(size + IP_HEADER_SIZE));
 	ip->Identification = Endian16(id);
-	ip->FlagsAndFlagmentOffset[0] = ip->FlagsAndFlagmentOffset[1] = 0;
+	ip->FlagsAndFragmentOffset[0] = ip->FlagsAndFragmentOffset[1] = 0;
 	IPV4_SET_OFFSET(ip, (offset / 8));
 	if ((offset + size) >= total_size)
 	{
@@ -9241,7 +9308,16 @@ UINT ServeDhcpDiscover(VH *v, UCHAR *mac, UINT request_ip)
 	if (ret == 0)
 	{
 		// Take an appropriate IP addresses that can be assigned newly
-		ret = GetFreeDhcpIpAddress(v);
+		HUB_OPTION *opt = NatGetHubOption(v);
+
+		if (opt != NULL && opt->SecureNAT_RandomizeAssignIp)
+		{
+			ret = GetFreeDhcpIpAddressByRandom(v, mac);
+		}
+		else
+		{
+			ret = GetFreeDhcpIpAddress(v);
+		}
 	}
 
 	return ret;
@@ -9268,6 +9344,56 @@ UINT GetFreeDhcpIpAddress(VH *v)
 		{
 			// A free IP address is found
 			return ip;
+		}
+	}
+
+	// There is no free address
+	return 0;
+}
+
+// Take an appropriate IP addresses that can be assigned newly (random)
+UINT GetFreeDhcpIpAddressByRandom(VH *v, UCHAR *mac)
+{
+	UINT ip_start, ip_end;
+	UINT i;
+	UINT num_retry;
+	// Validate arguments
+	if (v == NULL || mac == NULL)
+	{
+		return 0;
+	}
+
+	ip_start = Endian32(v->DhcpIpStart);
+	ip_end = Endian32(v->DhcpIpEnd);
+
+	if (ip_start > ip_end)
+	{
+		return 0;
+	}
+
+	num_retry = (ip_end - ip_start + 1) * 2;
+	num_retry = MIN(num_retry, 65536 * 2);
+
+	for (i = 0;i < num_retry;i++)
+	{
+		UCHAR rand_seed[sizeof(UINT) + 6];
+		UCHAR hash[16];
+		UINT rand_int;
+		UINT new_ip;
+
+		WRITE_UINT(&rand_seed[0], i);
+		Copy(rand_seed + sizeof(UINT), mac, 6);
+
+		Md5(hash, rand_seed, sizeof(rand_seed));
+
+		rand_int = READ_UINT(hash);
+
+		new_ip = Endian32(ip_start + (rand_int % (ip_end - ip_start + 1)));
+
+		if (SearchDhcpLeaseByIp(v, new_ip) == NULL)
+		{
+			// A free IP address is found
+			return new_ip;
 		}
 	}
 
@@ -9436,6 +9562,53 @@ void VirtualDhcpServer(VH *v, PKT *p)
 				if (GetGlobalServerFlag(GSF_DISABLE_PUSH_ROUTE) == 0)
 				{
 					Copy(&ret.ClasslessRoute, &v->PushRoute, sizeof(DHCP_CLASSLESS_ROUTE_TABLE));
+
+					if (IsIpcMacAddress(p->MacAddressSrc))
+					{
+						if (ret.Gateway == 0)
+						{
+							// If the default gateway is not specified, add the static routing table
+							// entry for the local IP subnet
+							// (for PPP clients)
+							IP dhcp_ip;
+							IP dhcp_mask;
+							IP dhcp_network;
+
+							UINTToIP(&dhcp_ip, ip);
+
+							if (ip == 0)
+							{
+								UINTToIP(&dhcp_ip, p->L3.IPv4Header->SrcIP);
+							}
+
+							UINTToIP(&dhcp_mask, v->DhcpMask);
+
+							IPAnd4(&dhcp_network, &dhcp_ip, &dhcp_mask);
+
+							if (GetBestClasslessRoute(&ret.ClasslessRoute, &dhcp_ip) == NULL)
+							{
+								if (ret.ClasslessRoute.NumExistingRoutes < MAX_DHCP_CLASSLESS_ROUTE_ENTRIES)
+								{
+									DHCP_CLASSLESS_ROUTE *cr = &ret.ClasslessRoute.Entries[ret.ClasslessRoute.NumExistingRoutes];
+
+									cr->Exists = true;
+
+									UINTToIP(&cr->Gateway, v->HostIP);
+
+									if (v->UseNat == false && ret.ClasslessRoute.NumExistingRoutes >= 1)
+									{
+										Copy(&cr->Gateway, &ret.ClasslessRoute.Entries[0].Gateway, sizeof(IP));
+									}
+
+									Copy(&cr->Network, &dhcp_network, sizeof(IP));
+									Copy(&cr->SubnetMask, &dhcp_mask, sizeof(IP));
+									cr->SubnetMaskLen = SubnetMaskToInt(&dhcp_mask);
+
+									ret.ClasslessRoute.NumExistingRoutes++;
+								}
+							}
+						}
+					}
 				}
 
 				if (opt->Opcode != DHCP_INFORM)
@@ -10127,15 +10300,15 @@ void GenMacAddress(UCHAR *mac)
 	WriteBuf(b, rand_data, sizeof(rand_data));
 
 	// Hash
-	Hash(hash, b->Buf, b->Size, true);
+	Sha0(hash, b->Buf, b->Size);
 
 	// Generate a MAC address
-	mac[0] = 0x00;
-	mac[1] = 0xAC;		// AC hurray
-	mac[2] = hash[0];
-	mac[3] = hash[1];
-	mac[4] = hash[2];
-	mac[5] = hash[3];
+	mac[0] = 0x5E;
+	mac[1] = hash[0];
+	mac[2] = hash[1];
+	mac[3] = hash[2];
+	mac[4] = hash[3];
+	mac[5] = hash[4];
 
 	FreeBuf(b);
 }
@@ -10148,7 +10321,3 @@ PACKET_ADAPTER *VirtualGetPacketAdapter()
 }
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Contributors:
 // - ELIN (https://github.com/el1n)
 // Comments: Tetsuo Sugiyama, Ph.D.
@@ -56,10 +56,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -173,7 +188,7 @@
 		return err;														\
 	}
 #define	CHECK_RIGHT														\
-	if (a->ServerAdmin == false && (t->HubName == NULL || StrCmpi(a->HubName, t->HubName) != 0))	\
+	if (a->ServerAdmin == false && (StrCmpi(a->HubName, t->HubName) != 0))	\
 		return ERR_NOT_ENOUGH_RIGHT;	\
 	if (IsEmptyStr(t->HubName))			\
 		return ERR_INVALID_PARAMETER;
@@ -395,11 +410,12 @@ PACK *AdminDispatch(RPC *rpc, char *name, PACK *p)
 
 	server = a->Server;
 
-	if (server != NULL)
+	if (server == NULL)
 	{
-		cedar = server->Cedar;
+		return NULL;
 	}
 
+	cedar = server->Cedar;
 	Lock(cedar->CedarSuperLock);
 
 	if (true)
@@ -449,7 +465,7 @@ PACK *AdminDispatch(RPC *rpc, char *name, PACK *p)
 	DECLARE_RPC("DeleteHub", RPC_DELETE_HUB, StDeleteHub, InRpcDeleteHub, OutRpcDeleteHub)
 	DECLARE_RPC("GetHubRadius", RPC_RADIUS, StGetHubRadius, InRpcRadius, OutRpcRadius)
 	DECLARE_RPC("SetHubRadius", RPC_RADIUS, StSetHubRadius, InRpcRadius, OutRpcRadius)
-	DECLARE_RPC_EX("EnumConnection", RPC_ENUM_CONNECTION, StEnumConnection, InRpcEnumConnection, OutRpcEnumConnection, FreeRpcEnumConnetion)
+	DECLARE_RPC_EX("EnumConnection", RPC_ENUM_CONNECTION, StEnumConnection, InRpcEnumConnection, OutRpcEnumConnection, FreeRpcEnumConnection)
 	DECLARE_RPC("DisconnectConnection", RPC_DISCONNECT_CONNECTION, StDisconnectConnection, InRpcDisconnectConnection, OutRpcDisconnectConnection)
 	DECLARE_RPC("GetConnectionInfo", RPC_CONNECTION_INFO, StGetConnectionInfo, InRpcConnectionInfo, OutRpcConnectionInfo)
 	DECLARE_RPC("SetHubOnline", RPC_SET_HUB_ONLINE, StSetHubOnline, InRpcSetHubOnline, OutRpcSetHubOnline)
@@ -628,7 +644,7 @@ DECLARE_SC_EX("EnumHub", RPC_ENUM_HUB, ScEnumHub, InRpcEnumHub, OutRpcEnumHub, F
 DECLARE_SC("DeleteHub", RPC_DELETE_HUB, ScDeleteHub, InRpcDeleteHub, OutRpcDeleteHub)
 DECLARE_SC("GetHubRadius", RPC_RADIUS, ScGetHubRadius, InRpcRadius, OutRpcRadius)
 DECLARE_SC("SetHubRadius", RPC_RADIUS, ScSetHubRadius, InRpcRadius, OutRpcRadius)
-DECLARE_SC_EX("EnumConnection", RPC_ENUM_CONNECTION, ScEnumConnection, InRpcEnumConnection, OutRpcEnumConnection, FreeRpcEnumConnetion)
+DECLARE_SC_EX("EnumConnection", RPC_ENUM_CONNECTION, ScEnumConnection, InRpcEnumConnection, OutRpcEnumConnection, FreeRpcEnumConnection)
 DECLARE_SC("DisconnectConnection", RPC_DISCONNECT_CONNECTION, ScDisconnectConnection, InRpcDisconnectConnection, OutRpcDisconnectConnection)
 DECLARE_SC("GetConnectionInfo", RPC_CONNECTION_INFO, ScGetConnectionInfo, InRpcConnectionInfo, OutRpcConnectionInfo)
 DECLARE_SC("SetHubOnline", RPC_SET_HUB_ONLINE, ScSetHubOnline, InRpcSetHubOnline, OutRpcSetHubOnline)
@@ -1097,11 +1113,6 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 		UCHAR *zero_buffer;
 		UINT zero_buffer_size = 128 * 1024;
 		char name_tmp[MAX_SIZE];
-		X *dummy_x = NULL;
-		K *dummy_private_k = NULL;
-		K *dummy_public_k = NULL;
-		BUF *dummy_x_buf = NULL;
-		BUF *dummy_k_buf = NULL;
 
 		zero_buffer = ZeroMalloc(zero_buffer_size);
 
@@ -1113,6 +1124,24 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 				x = CloneX(c->ServerX);
 			}
 			Unlock(c->lock);
+
+			if (x != NULL)
+			{
+				// Get the root certificate
+				if (x->root_cert == false)
+				{
+					X *root_x = NULL;
+					LIST *cert_list = NewCertList(true);
+
+					if (TryGetRootCertChain(cert_list, x, true, &root_x))
+					{
+						FreeX(x);
+						x = root_x;
+					}
+
+					FreeCertList(cert_list);
+				}
+			}
 		}
 
 		x_buf = XToBuf(x, true);
@@ -1120,34 +1149,6 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 		SeekBufToEnd(x_buf);
 		WriteBufChar(x_buf, 0);
 		SeekBufToBegin(x_buf);
-
-		// Generate dummy certification
-		if (x != NULL)
-		{
-			if (RsaGen(&dummy_private_k, &dummy_public_k, x->bits))
-			{
-				NAME *name;
-				wchar_t cn[128];
-
-				UniToStr64(cn, Rand64());
-
-				name = NewName(cn, cn, cn, L"US", NULL, NULL);
-
-				dummy_x = NewRootX(dummy_public_k, dummy_private_k, name, MAX(GetDaysUntil2038(), SERVER_DEFAULT_CERT_DAYS), NULL);
-
-				FreeName(name);
-
-				dummy_x_buf = XToBuf(dummy_x, true);
-				SeekBufToEnd(dummy_x_buf);
-				WriteBufChar(dummy_x_buf, 0);
-				SeekBufToBegin(dummy_x_buf);
-
-				dummy_k_buf = KToBuf(dummy_private_k, true, NULL);
-				SeekBufToEnd(dummy_k_buf);
-				WriteBufChar(dummy_k_buf, 0);
-				SeekBufToBegin(dummy_k_buf);
-			}
-		}
 
 		FreeX(x);
 		Zero(hostname, sizeof(hostname));
@@ -1266,18 +1267,6 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 				"$CA$", x_buf->Buf, false);
 		}
 
-		if (dummy_x_buf != NULL)
-		{
-			ReplaceStrEx((char *)config_l3_buf->Buf, config_l3_buf->Size, (char *)config_l3_buf->Buf,
-				"$CERT$", dummy_x_buf->Buf, false);
-		}
-
-		if (dummy_k_buf != NULL)
-		{
-			ReplaceStrEx((char *)config_l3_buf->Buf, config_l3_buf->Size, (char *)config_l3_buf->Buf,
-				"$KEY$", dummy_k_buf->Buf, false);
-		}
-
 		Format(name_tmp, sizeof(name_tmp), "%sopenvpn_remote_access_l3.ovpn", my_hostname);
 		ZipAddFileSimple(p, name_tmp, LocalTime64(), 0, config_l3_buf->Buf, StrLen(config_l3_buf->Buf));
 
@@ -1296,18 +1285,6 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 		{
 			ReplaceStrEx((char *)config_l2_buf->Buf, config_l2_buf->Size, (char *)config_l2_buf->Buf,
 				"$CA$", x_buf->Buf, false);
-		}
-
-		if (dummy_x_buf != NULL)
-		{
-			ReplaceStrEx((char *)config_l2_buf->Buf, config_l2_buf->Size, (char *)config_l2_buf->Buf,
-				"$CERT$", dummy_x_buf->Buf, false);
-		}
-
-		if (dummy_k_buf != NULL)
-		{
-			ReplaceStrEx((char *)config_l2_buf->Buf, config_l2_buf->Size, (char *)config_l2_buf->Buf,
-				"$KEY$", dummy_k_buf->Buf, false);
 		}
 
 		Format(name_tmp, sizeof(name_tmp), "%sopenvpn_site_to_site_bridge_l2.ovpn", my_hostname);
@@ -1329,13 +1306,6 @@ UINT StMakeOpenVpnConfigFile(ADMIN *a, RPC_READ_LOG_FILE *t)
 		FreeBuf(sample_buf);
 		FreeBuf(readme_pdf_buf);
 		FreeBuf(x_buf);
-
-		FreeX(dummy_x);
-		FreeK(dummy_private_k);
-		FreeK(dummy_public_k);
-
-		FreeBuf(dummy_k_buf);
-		FreeBuf(dummy_x_buf);
 
 		Free(zero_buffer);
 	}
@@ -1585,7 +1555,7 @@ UINT StGetHubMsg(ADMIN *a, RPC_MSG *t)
 	else
 	{
 		FreeRpcMsg(t);
-		Zero(t, sizeof(t));
+		Zero(t, sizeof(RPC_MSG));
 
 		t->Msg = GetHubMsg(h);
 
@@ -3939,20 +3909,20 @@ UINT StDeleteMacTable(ADMIN *a, RPC_DELETE_TABLE *t)
 		return ERR_NOT_ENOUGH_RIGHT;
 	}
 
-	LockList(h->MacTable);
+	LockHashList(h->MacHashTable);
 	{
-		if (IsInListKey(h->MacTable, t->Key))
+		if (IsInHashListKey(h->MacHashTable, t->Key))
 		{
-			MAC_TABLE_ENTRY *e = ListKeyToPointer(h->MacTable, t->Key);
+			MAC_TABLE_ENTRY *e = HashListKeyToPointer(h->MacHashTable, t->Key);
+			DeleteHash(h->MacHashTable, e);
 			Free(e);
-			Delete(h->MacTable, e);
 		}
 		else
 		{
 			ret = ERR_OBJECT_NOT_FOUND;
 		}
 	}
-	UnlockList(h->MacTable);
+	UnlockHashList(h->MacHashTable);
 
 	if (ret == ERR_OBJECT_NOT_FOUND)
 	{
@@ -4007,15 +3977,15 @@ UINT SiEnumMacTable(SERVER *s, char *hubname, RPC_ENUM_MAC_TABLE *t)
 
 	StrCpy(t->HubName, sizeof(t->HubName), hubname);
 
-	LockList(h->MacTable);
+	LockHashList(h->MacHashTable);
 	{
-		t->NumMacTable = LIST_NUM(h->MacTable);
+		MAC_TABLE_ENTRY **pp = (MAC_TABLE_ENTRY **)HashListToArray(h->MacHashTable, &t->NumMacTable);
 		t->MacTables = ZeroMalloc(sizeof(RPC_ENUM_MAC_TABLE_ITEM) * t->NumMacTable);
 
 		for (i = 0;i < t->NumMacTable;i++)
 		{
 			RPC_ENUM_MAC_TABLE_ITEM *e = &t->MacTables[i];
-			MAC_TABLE_ENTRY *mac = LIST_DATA(h->MacTable, i);
+			MAC_TABLE_ENTRY *mac = pp[i];
 
 			e->Key = POINTER_TO_KEY(mac);
 			StrCpy(e->SessionName, sizeof(e->SessionName), mac->Session->Name);
@@ -4026,8 +3996,10 @@ UINT SiEnumMacTable(SERVER *s, char *hubname, RPC_ENUM_MAC_TABLE *t)
 
 			GetMachineName(e->RemoteHostname, sizeof(e->RemoteHostname));
 		}
+
+		Free(pp);
 	}
-	UnlockList(h->MacTable);
+	UnlockHashList(h->MacHashTable);
 
 	ReleaseHub(h);
 
@@ -5608,19 +5580,16 @@ UINT StAddAccess(ADMIN *a, RPC_ADD_ACCESS *t)
 
 	if (no_include)
 	{
-		if (no_include)
+		if (StartWith(t->Access.SrcUsername, ACCESS_LIST_INCLUDED_PREFIX) ||
+			StartWith(t->Access.SrcUsername, ACCESS_LIST_EXCLUDED_PREFIX))
 		{
-			if (StartWith(t->Access.SrcUsername, ACCESS_LIST_INCLUDED_PREFIX) ||
-				StartWith(t->Access.SrcUsername, ACCESS_LIST_EXCLUDED_PREFIX))
-			{
-				ClearStr(t->Access.SrcUsername, sizeof(t->Access.SrcUsername));
-			}
+			ClearStr(t->Access.SrcUsername, sizeof(t->Access.SrcUsername));
+		}
 
-			if (StartWith(t->Access.DestUsername, ACCESS_LIST_INCLUDED_PREFIX) ||
-				StartWith(t->Access.DestUsername, ACCESS_LIST_EXCLUDED_PREFIX))
-			{
-				ClearStr(t->Access.DestUsername, sizeof(t->Access.DestUsername));
-			}
+		if (StartWith(t->Access.DestUsername, ACCESS_LIST_INCLUDED_PREFIX) ||
+			StartWith(t->Access.DestUsername, ACCESS_LIST_EXCLUDED_PREFIX))
+		{
+			ClearStr(t->Access.DestUsername, sizeof(t->Access.DestUsername));
 		}
 	}
 
@@ -5829,6 +5798,8 @@ UINT StDeleteLink(ADMIN *a, RPC_LINK *t)
 
 		return ERR_OBJECT_NOT_FOUND;
 	}
+
+	k->NoOnline = true;
 
 	ALog(a, h, "LA_DELETE_LINK", t->AccountName);
 
@@ -6101,7 +6072,7 @@ UINT StGetLinkStatus(ADMIN *a, RPC_LINK_STATUS *t)
 		return ERR_OBJECT_NOT_FOUND;
 	}
 
-	// Get status infomation from session
+	// Get status information from session
 	Lock(k->lock);
 	{
 		sess = k->ClientSession;
@@ -6266,7 +6237,7 @@ UINT StGetLink(ADMIN *a, RPC_CREATE_LINK *t)
 
 	StrCpy(hubname, sizeof(hubname), t->HubName);
 	FreeRpcCreateLink(t);
-	Zero(t, sizeof(t));
+	Zero(t, sizeof(RPC_CREATE_LINK));
 	StrCpy(t->HubName, sizeof(t->HubName), hubname);
 
 	Lock(k->lock);
@@ -6702,7 +6673,7 @@ UINT StAddCa(ADMIN *a, RPC_HUB_ADD_CA *t)
 
 	if (t->Cert == NULL)
 	{
-		ERR_INVALID_PARAMETER;
+		return ERR_INVALID_PARAMETER;
 	}
 
 	if (t->Cert->is_compatible_bit == false)
@@ -6847,7 +6818,7 @@ UINT StGetHubStatus(ADMIN *a, RPC_HUB_STATUS *t)
 			t->NumGroups = LIST_NUM(h->HubDb->GroupList);
 		}
 
-		t->NumMacTables = LIST_NUM(h->MacTable);
+		t->NumMacTables = HASH_LIST_NUM(h->MacHashTable);
 		t->NumIpTables = LIST_NUM(h->IpTable);
 
 		Lock(h->TrafficLock);
@@ -7418,8 +7389,8 @@ UINT StGetSecureNATOption(ADMIN *a, VH_OPTION *t)
 	}
 
 	Zero(t, sizeof(VH_OPTION));
-	StrCpy(t->HubName, sizeof(t->HubName), hubname);
 	Copy(t, h->SecureNATOption, sizeof(VH_OPTION));
+	StrCpy(t->HubName, sizeof(t->HubName), h->Name);
 	t->ApplyDhcpPushRoutes = true;
 
 	ReleaseHub(h);
@@ -7606,7 +7577,7 @@ UINT StEnumConnection(ADMIN *a, RPC_ENUM_CONNECTION *t)
 
 	SERVER_ADMIN_ONLY;
 
-	FreeRpcEnumConnetion(t);
+	FreeRpcEnumConnection(t);
 	Zero(t, sizeof(RPC_ENUM_CONNECTION));
 
 	LockList(c->ConnectionList);
@@ -7712,7 +7683,7 @@ UINT StGetHubRadius(ADMIN *a, RPC_RADIUS *t)
 		return ERR_HUB_NOT_FOUND;
 	}
 
-	Zero(t, sizeof(t));
+	Zero(t, sizeof(RPC_RADIUS));
 	//GetRadiusServer(h, t->RadiusServerName, sizeof(t->RadiusServerName),
 	//	&t->RadiusPort, t->RadiusSecret, sizeof(t->RadiusSecret));
 	GetRadiusServerEx(h, t->RadiusServerName, sizeof(t->RadiusServerName),
@@ -7830,11 +7801,11 @@ UINT StEnumHub(ADMIN *a, RPC_ENUM_HUB *t)
 
 				e->NumSessions = LIST_NUM(h->SessionList);
 
-				LockList(h->MacTable);
+				LockHashList(h->MacHashTable);
 				{
-					e->NumMacTables = LIST_NUM(h->MacTable);
+					e->NumMacTables = HASH_LIST_NUM(h->MacHashTable);
 				}
-				UnlockList(h->MacTable);
+				UnlockHashList(h->MacHashTable);
 
 				LockList(h->IpTable);
 				{
@@ -8044,7 +8015,7 @@ UINT StSetHub(ADMIN *a, RPC_CREATE_HUB *t)
 	{
 		UCHAR hash1[SHA1_SIZE], hash2[SHA1_SIZE];
 		HashPassword(hash1, ADMINISTRATOR_USERNAME, "");
-		Hash(hash2, "", 0, true);
+		Sha0(hash2, "", 0);
 
 		if (Cmp(t->HashedPassword, hash2, SHA1_SIZE) == 0 || Cmp(t->SecurePassword, hash1, SHA1_SIZE) == 0)
 		{
@@ -8243,14 +8214,7 @@ UINT StSetServerCipher(ADMIN *a, RPC_STR *t)
 
 	StrUpper(t->String);
 
-	if (CheckCipherListName(t->String) == false)
-	{
-		return ERR_CIPHER_NOT_SUPPORTED;
-	}
-	else
-	{
-		ALog(a, NULL, "LA_SET_SERVER_CIPHER", t->String);
-	}
+	ALog(a, NULL, "LA_SET_SERVER_CIPHER", t->String);
 
 	Lock(c->lock);
 	{
@@ -8329,6 +8293,15 @@ UINT StSetServerCert(ADMIN *a, RPC_KEY_PAIR *t)
 	if (CheckXandK(t->Cert, t->Key) == false)
 	{
 		return ERR_PROTOCOL_ERROR;
+	}
+
+	t->Flag1 = 1;
+	if (t->Cert->root_cert == false)
+	{
+		if (DownloadAndSaveIntermediateCertificatesIfNecessary(t->Cert) == false)
+		{
+			t->Flag1 = 0;
+		}
 	}
 
 	SetCedarCert(c, t->Cert, t->Key);
@@ -8834,7 +8807,7 @@ UINT StGetServerStatus(ADMIN *a, RPC_SERVER_STATUS *t)
 				}
 			}
 
-			t->NumMacTables += LIST_NUM(h->MacTable);
+			t->NumMacTables += HASH_LIST_NUM(h->MacHashTable);
 			t->NumIpTables += LIST_NUM(h->IpTable);
 
 			if (h->HubDb != NULL)
@@ -10354,6 +10327,8 @@ void SiEnumLocalLogFileList(SERVER *s, char *hubname, RPC_ENUM_LOG_FILE *t)
 void SiEnumLocalSession(SERVER *s, char *hubname, RPC_ENUM_SESSION *t)
 {
 	HUB *h;
+	UINT64 now = Tick64();
+	UINT64 dormant_interval = 0;
 	// Validate arguments
 	if (s == NULL || hubname == NULL || t == NULL)
 	{
@@ -10369,6 +10344,11 @@ void SiEnumLocalSession(SERVER *s, char *hubname, RPC_ENUM_SESSION *t)
 		t->NumSession = 0;
 		t->Sessions = ZeroMalloc(0);
 		return;
+	}
+
+	if (h->Option != NULL)
+	{
+		dormant_interval = h->Option->DetectDormantSessionInterval * (UINT64)1000;
 	}
 
 	LockList(h->SessionList);
@@ -10407,8 +10387,36 @@ void SiEnumLocalSession(SERVER *s, char *hubname, RPC_ENUM_SESSION *t)
 				e->Client_BridgeMode = s->IsBridgeMode;
 				e->Client_MonitorMode = s->IsMonitorMode;
 				Copy(e->UniqueId, s->NodeInfo.UniqueId, 16);
+
+				if (s->NormalClient)
+				{
+					e->IsDormantEnabled = (dormant_interval == 0 ? false : true);
+					if (e->IsDormantEnabled)
+					{
+						if (s->LastCommTimeForDormant == 0)
+						{
+							e->LastCommDormant = (UINT64)0x7FFFFFFF;
+						}
+						else
+						{
+							e->LastCommDormant = now - s->LastCommTimeForDormant;
+						}
+						if (s->LastCommTimeForDormant == 0)
+						{
+							e->IsDormant = true;
+						}
+						else
+						{
+							if ((s->LastCommTimeForDormant + dormant_interval) < now)
+							{
+								e->IsDormant = true;
+							}
+						}
+					}
+				}
 			}
 			Unlock(s->lock);
+
 			GetMachineName(e->RemoteHostname, sizeof(e->RemoteHostname));
 		}
 	}
@@ -11496,7 +11504,7 @@ void OutRpcEnumConnection(PACK *p, RPC_ENUM_CONNECTION *t)
 		PackAddIntEx(p, "Type", e->Type, i, t->NumConnection);
 	}
 }
-void FreeRpcEnumConnetion(RPC_ENUM_CONNECTION *t)
+void FreeRpcEnumConnection(RPC_ENUM_CONNECTION *t)
 {
 	// Validate arguments
 	if (t == NULL)
@@ -11759,12 +11767,12 @@ void InRpcHubEnumCa(RPC_HUB_ENUM_CA *t, PACK *p)
 void OutRpcHubEnumCa(PACK *p, RPC_HUB_ENUM_CA *t)
 {
 	UINT i;
-	PackAddStr(p, "HubName", t->HubName);
 	// Validate arguments
 	if (t == NULL || p == NULL)
 	{
 		return;
 	}
+	PackAddStr(p, "HubName", t->HubName);
 
 	for (i = 0;i < t->NumCa;i++)
 	{
@@ -12232,12 +12240,12 @@ void InRpcEnumAccessList(RPC_ENUM_ACCESS_LIST *a, PACK *p)
 void OutRpcEnumAccessList(PACK *p, RPC_ENUM_ACCESS_LIST *a)
 {
 	UINT i;
-	PackAddStr(p, "HubName", a->HubName);
 	// Validate arguments
 	if (a == NULL || p == NULL)
 	{
 		return;
 	}
+	PackAddStr(p, "HubName", a->HubName);
 
 	for (i = 0;i < a->NumAccess;i++)
 	{
@@ -12492,12 +12500,12 @@ void InRpcEnumUser(RPC_ENUM_USER *t, PACK *p)
 void OutRpcEnumUser(PACK *p, RPC_ENUM_USER *t)
 {
 	UINT i;
-	PackAddStr(p, "HubName", t->HubName);
 	// Validate arguments
 	if (t == NULL || p == NULL)
 	{
 		return;
 	}
+	PackAddStr(p, "HubName", t->HubName);
 
 	for (i = 0;i < t->NumUser;i++)
 	{
@@ -12698,17 +12706,20 @@ void InRpcEnumSession(RPC_ENUM_SESSION *t, PACK *p)
 		PackGetStrEx(p, "RemoteHostname", e->RemoteHostname, sizeof(e->RemoteHostname), i);
 		e->VLanId = PackGetIntEx(p, "VLanId", i);
 		PackGetDataEx2(p, "UniqueId", e->UniqueId, sizeof(e->UniqueId), i);
+		e->IsDormantEnabled = PackGetBoolEx(p, "IsDormantEnabled", i);
+		e->IsDormant = PackGetBoolEx(p, "IsDormant", i);
+		e->LastCommDormant = PackGetInt64Ex(p, "LastCommDormant", i);
 	}
 }
 void OutRpcEnumSession(PACK *p, RPC_ENUM_SESSION *t)
 {
 	UINT i;
-	PackAddStr(p, "HubName", t->HubName);
 	// Validate arguments
 	if (t == NULL || p == NULL)
 	{
 		return;
 	}
+	PackAddStr(p, "HubName", t->HubName);
 
 	for (i = 0;i < t->NumSession;i++)
 	{
@@ -12732,6 +12743,9 @@ void OutRpcEnumSession(PACK *p, RPC_ENUM_SESSION *t)
 		PackAddBoolEx(p, "Client_MonitorMode", e->Client_MonitorMode, i, t->NumSession);
 		PackAddIntEx(p, "VLanId", e->VLanId, i, t->NumSession);
 		PackAddDataEx(p, "UniqueId", e->UniqueId, sizeof(e->UniqueId), i, t->NumSession);
+		PackAddBoolEx(p, "IsDormantEnabled", e->IsDormantEnabled, i, t->NumSession);
+		PackAddBoolEx(p, "IsDormant", e->IsDormant, i, t->NumSession);
+		PackAddInt64Ex(p, "LastCommDormant", e->LastCommDormant, i, t->NumSession);
 	}
 }
 void FreeRpcEnumSession(RPC_ENUM_SESSION *t)
@@ -12756,6 +12770,7 @@ void InRpcKeyPair(RPC_KEY_PAIR *t, PACK *p)
 
 	t->Cert = PackGetX(p, "Cert");
 	t->Key = PackGetK(p, "Key");
+	t->Flag1 = PackGetInt(p, "Flag1");
 }
 void OutRpcKeyPair(PACK *p, RPC_KEY_PAIR *t)
 {
@@ -12767,6 +12782,7 @@ void OutRpcKeyPair(PACK *p, RPC_KEY_PAIR *t)
 
 	PackAddX(p, "Cert", t->Cert);
 	PackAddK(p, "Key", t->Key);
+	PackAddInt(p, "Flag1", t->Flag1);
 }
 void FreeRpcKeyPair(RPC_KEY_PAIR *t)
 {
@@ -13383,7 +13399,7 @@ UINT AdminAccept(CONNECTION *c, PACK *p)
 		StrCpy(hubname, sizeof(hubname), "");
 	}
 
-	// Cehck source IP address
+	// Check source IP address
 	if (CheckAdminSourceAddress(sock, hubname) == false)
 	{
 		SLog(c->Cedar, "LA_IP_DENIED", c->Name);
@@ -13406,7 +13422,7 @@ UINT AdminAccept(CONNECTION *c, PACK *p)
 	else
 	{
 		// Hub admin mode
-		if (cedar->Server != NULL && cedar->Server->ServerType == SERVER_TYPE_FARM_MEMBER)
+		if (server != NULL && server->ServerType == SERVER_TYPE_FARM_MEMBER)
 		{
 			// Connection with hub admin mode to cluster member is not permitted
 			return ERR_NOT_ENOUGH_RIGHT;
@@ -13583,7 +13599,7 @@ void HashAdminPassword(void *hash, char *password)
 		return;
 	}
 
-	Hash(hash, password, StrLen(password), true);
+	Sha0(hash, password, StrLen(password));
 }
 
 // Disconnect admin connection
@@ -13687,10 +13703,6 @@ SESSION *AdminConnectMain(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *h
 }
 
 // Admin connection
-RPC *AdminConnect(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err)
-{
-	return AdminConnectEx(cedar, o, hubname, hashed_password, err, NULL);
-}
 RPC *AdminConnectEx(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err, char *client_name)
 {
 	return AdminConnectEx2(cedar, o, hubname, hashed_password, err, client_name, NULL);
@@ -13808,7 +13820,7 @@ bool SiIsEmptyPassword(void *hash_password)
 		return false;
 	}
 
-	Hash(hash, "", 0, true);
+	Sha0(hash, "", 0);
 
 	if (Cmp(hash_password, hash, SHA1_SIZE) == 0)
 	{
@@ -13818,7 +13830,3 @@ bool SiIsEmptyPassword(void *hash_password)
 	return false;
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

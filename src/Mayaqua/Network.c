@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Contributors:
 // - nattoheaven (https://github.com/nattoheaven)
 // Comments: Tetsuo Sugiyama, Ph.D.
@@ -56,10 +56,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -213,9 +228,17 @@ static bool g_natt_low_priority = false;
 static LOCK *host_ip_address_list_cache_lock = NULL;
 static UINT64 host_ip_address_list_cache_last = 0;
 static LIST *host_ip_address_cache = NULL;
+static bool disable_gethostname_by_accept = false;
+static COUNTER *getip_thread_counter = NULL;
+static UINT max_getip_thread = 0;
 
 
-static char *cipher_list = "RC4-MD5 RC4-SHA AES128-SHA AES256-SHA DES-CBC-SHA DES-CBC3-SHA";
+static char *cipher_list = "RC4-MD5 RC4-SHA AES128-SHA AES256-SHA DES-CBC-SHA DES-CBC3-SHA DHE-RSA-AES128-SHA DHE-RSA-AES256-SHA AES128-GCM-SHA256 AES128-SHA256 AES256-GCM-SHA384 AES256-SHA256 DHE-RSA-AES128-GCM-SHA256 DHE-RSA-AES128-SHA256 DHE-RSA-AES256-GCM-SHA384 DHE-RSA-AES256-SHA256 ECDHE-RSA-AES128-GCM-SHA256 ECDHE-RSA-AES128-SHA256 ECDHE-RSA-AES256-GCM-SHA384 ECDHE-RSA-AES256-SHA384"
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	" DHE-RSA-CHACHA20-POLY1305 ECDHE-RSA-CHACHA20-POLY1305";
+#endif
+;
+
 static LIST *ip_clients = NULL;
 
 static LIST *local_mac_list = NULL;
@@ -225,6 +248,9 @@ static UINT rand_port_numbers[256] = {0};
 
 
 static bool g_use_privateip_file = false;
+static bool g_source_ip_validation_force_disable = false;
+
+static DH_CTX *dh_param = NULL;
 
 typedef struct PRIVATE_IP_SUBNET
 {
@@ -235,6 +261,7 @@ static LIST *g_private_ip_list = NULL;
 
 
 static LIST *g_dyn_value_list = NULL;
+
 
 
 //#define	RUDP_DETAIL_LOG
@@ -436,119 +463,10 @@ void FreeDynList()
 	g_dyn_value_list = NULL;
 }
 
-// Check whether the string in the string list appears in the specified string
-bool IsInStrByStrList(char *str, char *str_list)
-{
-	TOKEN_LIST *t;
-	bool ret = false;
-	// Validate arguments
-	if (str == NULL || str_list == NULL)
-	{
-		return false;
-	}
-
-	t = ParseTokenWithoutNullStr(str_list, ", \t\r\n");
-	if (t != NULL)
-	{
-		UINT i;
-
-		for (i = 0;i < t->NumTokens;i++)
-		{
-			char *s = t->Token[i];
-
-			if (StrLen(s) >= 1)
-			{
-				if (InStrEx(str, s, true))
-				{
-					ret = true;
-					break;
-				}
-			}
-		}
-	}
-
-	FreeToken(t);
-
-	return ret;
-}
-
-
-// Search whether the IP address exists on the IP address list string
-bool IsIpInStrList(IP *ip, char *ip_list)
-{
-	char ip_str[128];
-	TOKEN_LIST *t;
-	bool ret = false;
-	// Validate arguments
-	if (ip == NULL || ip_list == NULL)
-	{
-		return false;
-	}
-
-	Zero(ip_str, sizeof(ip_str));
-	IPToStr(ip_str, sizeof(ip_str), ip);
-
-	t = ParseTokenWithoutNullStr(ip_list, ", \t\r\n");
-
-	if (t != NULL)
-	{
-		UINT i;
-
-		for (i = 0;i < t->NumTokens;i++)
-		{
-			char *s = t->Token[i];
-
-			if (StrCmpi(s, ip_str) == 0)
-			{
-				ret = true;
-				break;
-			}
-		}
-	}
-
-	FreeToken(t);
-
-	return ret;
-}
-
-
 // Disable NAT-T function globally
 void DisableRDUPServerGlobally()
 {
 	g_no_rudp_server = true;
-}
-
-// Disable NAT-T registration globally
-void DisableRUDPRegisterGlobally()
-{
-	g_no_rudp_register = true;
-}
-
-// Lower the priority of the host at NAT-T
-void SetNatTLowPriority()
-{
-	g_natt_low_priority = true;
-}
-
-// Extract only the host name part from FQDN
-void GetSimpleHostname(char *hostname, UINT hostname_size, char *fqdn)
-{
-	UINT i;
-	ClearStr(hostname, hostname_size);
-	// Validate arguments
-	if (hostname == NULL || fqdn == NULL)
-	{
-		return;
-	}
-
-	StrCpy(hostname, hostname_size, fqdn);
-	Trim(hostname);
-
-	i = SearchStrEx(hostname, ".", 0, true);
-	if (i != INFINITE)
-	{
-		hostname[i] = 0;
-	}
 }
 
 // Get the current time zone
@@ -591,7 +509,8 @@ bool IsUseDnsProxy()
 // Flag of whether to use an alternate host name
 bool IsUseAlternativeHostname()
 {
-	return IsUseDnsProxy();
+
+	return false;
 }
 
 #ifdef	OS_WIN32
@@ -640,7 +559,7 @@ UINT GetCurrentDDnsFqdnHash()
 	Trim(name);
 	StrUpper(name);
 
-	HashSha1(hash, name, StrLen(name));
+	Sha1(hash, name, StrLen(name));
 
 	Copy(&ret, hash, sizeof(UINT));
 
@@ -707,24 +626,6 @@ void RefreshLocalMacAddressList()
 }
 
 // Check whether the specified MAC address exists on the local host
-bool IsMacAddressLocal(void *addr)
-{
-	LIST *o;
-	bool ret;
-	// Validate arguments
-	if (addr == NULL)
-	{
-		return false;
-	}
-
-	o = GetNicList();
-
-	ret = IsMacAddressLocalInner(o, addr);
-
-	FreeNicList(o);
-
-	return ret;
-}
 bool IsMacAddressLocalInner(LIST *o, void *addr)
 {
 	bool ret = false;
@@ -756,17 +657,15 @@ LIST *GetNicList()
 
 #ifdef	OS_WIN32
 	o = Win32GetNicList();
-#endif	// OS_WIN32
 
-#ifdef	UNIX_LINUX
-#endif	// UNIX_LINUX
-
-	if (o == NULL)
+	if (o != NULL)
 	{
-		return NewListFast(NULL);
+		return o;
 	}
 
-	return o;
+#endif	// OS_WIN32
+
+	return NewListFast(NULL);
 }
 
 #ifdef	OS_WIN32
@@ -924,7 +823,7 @@ bool GetIPViaDnsProxyForJapanFlets(IP *ip_ret, char *hostname, bool ipv6, UINT t
 		Format(connect_hostname2, sizeof(connect_hostname2), "[%s]", connect_hostname);
 	}
 
-	s = ConnectEx3(connect_hostname, BFLETS_DNS_PROXY_PORT, timeout, cancel, NULL, NULL, false, false, false);
+	s = ConnectEx3(connect_hostname, BFLETS_DNS_PROXY_PORT, timeout, cancel, NULL, NULL, false, false);
 
 	if (s == NULL)
 	{
@@ -942,7 +841,7 @@ bool GetIPViaDnsProxyForJapanFlets(IP *ip_ret, char *hostname, bool ipv6, UINT t
 	SetTimeout(s, timeout);
 
 	// Start the SSL
-	if (StartSSLEx(s, NULL, NULL, true, 0, NULL) && (*cancel == false))
+	if (StartSSLEx(s, NULL, NULL, 0, NULL) && (*cancel == false))
 	{
 		UCHAR hash[SHA1_SIZE];
 		BUF *hash2 = StrToBin(BFLETS_DNS_PROXY_CERT_HASH);
@@ -1537,6 +1436,18 @@ void RUDPProcess_NatT_Recv(RUDP_STACK *r, UDPPACKET *udp)
 					// Save the IP address and port number at the time of registration
 					PackGetStr(p, "your_ip_and_port", r->NatT_Registered_IPAndPort, sizeof(r->NatT_Registered_IPAndPort));
 
+					if (g_source_ip_validation_force_disable == false)
+					{
+						// Enable the source IP address validation mechanism
+						r->NatT_EnableSourceIpValidation = PackGetBool(p, "enable_source_ip_validation");
+
+					}
+					else
+					{
+						// Force disable the source IP address validation mechanism
+						r->NatT_EnableSourceIpValidation = false;
+					}
+
 					// Global port of itself
 					my_global_port = PackGetInt(p, "your_port");
 
@@ -1554,7 +1465,7 @@ void RUDPProcess_NatT_Recv(RUDP_STACK *r, UDPPACKET *udp)
 			else if (PackCmpStr(p, "opcode", "nat_t_connect_relay"))
 			{
 				// Connection request from the client via the NAT-T server
-				if (is_ok)
+				if (is_ok && (PackGetInt64(p, "session_key") == r->NatT_SessionKey))
 				{
 					char client_ip_str[MAX_SIZE];
 					UINT client_port;
@@ -1568,6 +1479,11 @@ void RUDPProcess_NatT_Recv(RUDP_STACK *r, UDPPACKET *udp)
 					{
 						UCHAR *rand_data;
 						UINT rand_size;
+
+						if (r->NatT_EnableSourceIpValidation)
+						{
+							RUDPAddIpToValidateList(r, &client_ip);
+						}
 
 						rand_size = Rand32() % 19;
 						rand_data = Malloc(rand_size);
@@ -1599,120 +1515,125 @@ void RUDPDo_NatT_Interrupt(RUDP_STACK *r)
 
 	if (r->ServerMode)
 	{
-		if (IsZeroIp(&r->NatT_IP_Safe) == false)
+
+		if (g_no_rudp_register == false && IsZeroIp(&r->NatT_IP_Safe) == false)
 		{
-			if (g_no_rudp_register == false)
+			if (r->NatT_GetTokenNextTick == 0 || r->Now >= r->NatT_GetTokenNextTick)
 			{
-				if (r->NatT_GetTokenNextTick == 0 || r->Now >= r->NatT_GetTokenNextTick)
+				// Try to get a token from the NAT-T server periodically
+				PACK *p = NewPack();
+				BUF *b;
+
+				PackAddStr(p, "opcode", "get_token");
+				PackAddInt64(p, "tran_id", r->NatT_TranId);
+				PackAddInt(p, "nat_traversal_version", UDP_NAT_TRAVERSAL_VERSION);
+
+				b = PackToBuf(p);
+				FreePack(p);
+
+				RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, b->Buf, b->Size, 0);
+
+				FreeBuf(b);
+
+				// Determine the next acquisition time
+				r->NatT_GetTokenFailNum++;
+				r->NatT_GetTokenNextTick = r->Now + (UINT64)(UDP_NAT_T_GET_TOKEN_INTERVAL_1 * (UINT64)MIN(r->NatT_GetTokenFailNum, UDP_NAT_T_GET_TOKEN_INTERVAL_FAIL_MAX));
+				AddInterrupt(r->Interrupt, r->NatT_GetTokenNextTick);
+				r->NatT_Token_Ok = false;
+			}
+		}
+
+		{
+			if (IsZeroIp(&r->NatT_IP_Safe) == false)
+			{
+				// Normal servers: Send request packets to the NAT-T server
+				if (r->NatT_NextNatStatusCheckTick == 0 || r->Now >= r->NatT_NextNatStatusCheckTick)
 				{
-					// Try to get a token from the NAT-T server periodically
-					PACK *p = NewPack();
-					BUF *b;
+					UCHAR a = 'A';
+					UINT ddns_hash;
+					// Check of the NAT state
+					RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, &a, 1, 0);
 
-					PackAddStr(p, "opcode", "get_token");
-					PackAddInt64(p, "tran_id", r->NatT_TranId);
-					PackAddInt(p, "nat_traversal_version", UDP_NAT_TRAVERSAL_VERSION);
+					// Execution time of the next
+					r->NatT_NextNatStatusCheckTick = r->Now + (UINT64)GenRandInterval(UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MIN, UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MAX);
+					AddInterrupt(r->Interrupt, r->NatT_NextNatStatusCheckTick);
 
-					b = PackToBuf(p);
-					FreePack(p);
+					// Check whether the DDNS host name changing have not occurred
+					ddns_hash = GetCurrentDDnsFqdnHash();
 
-					RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, b->Buf, b->Size, 0);
-
-					FreeBuf(b);
-
-					// Determine the next acquisition time
-					r->NatT_GetTokenFailNum++;
-					r->NatT_GetTokenNextTick = r->Now + (UINT64)(UDP_NAT_T_GET_TOKEN_INTERVAL_1 * (UINT64)MIN(r->NatT_GetTokenFailNum, UDP_NAT_T_GET_TOKEN_INTERVAL_FAIL_MAX));
-					AddInterrupt(r->Interrupt, r->NatT_GetTokenNextTick);
-					r->NatT_Token_Ok = false;
+					if (r->LastDDnsFqdnHash != ddns_hash)
+					{
+						r->LastDDnsFqdnHash = ddns_hash;
+						// Do the Register immediately if there is a change in the DDNS host name
+						r->NatT_RegisterNextTick = 0;
+					}
 				}
 			}
+		}
 
-			if (r->NatT_NextNatStatusCheckTick == 0 || r->Now >= r->NatT_NextNatStatusCheckTick)
+		if (r->NatT_Token_Ok && g_no_rudp_register == false && IsZeroIp(&r->NatT_IP_Safe) == false)
+		{
+			if (r->NatT_RegisterNextTick == 0 || r->Now >= r->NatT_RegisterNextTick)
 			{
-				UCHAR a = 'A';
-				UINT ddns_hash;
-				// Check of the NAT state
-				RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, &a, 1, 0);
+				// Try to register itself periodically for NAT-T server
+				PACK *p = NewPack();
+				BUF *b;
+				char private_ip_str[MAX_SIZE];
+				char machine_key[MAX_SIZE];
+				char machine_name[MAX_SIZE];
+				UCHAR hash[SHA1_SIZE];
+				char ddns_fqdn[MAX_SIZE];
 
-				// Execution time of the next
-				r->NatT_NextNatStatusCheckTick = r->Now + (UINT64)GenRandInterval(UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MIN, UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MAX);
-				AddInterrupt(r->Interrupt, r->NatT_NextNatStatusCheckTick);
+				Debug("NAT-T Registering...\n");
 
-				// Check whether the DDNS host name changing have not occurred
-				ddns_hash = GetCurrentDDnsFqdnHash();
+				GetCurrentDDnsFqdn(ddns_fqdn, sizeof(ddns_fqdn));
 
-				if (r->LastDDnsFqdnHash != ddns_hash)
+				PackAddStr(p, "opcode", "nat_t_register");
+				PackAddInt64(p, "tran_id", r->NatT_TranId);
+				PackAddStr(p, "token", r->NatT_Token);
+				PackAddStr(p, "svc_name", r->SvcName);
+				PackAddStr(p, "product_str", "SoftEther OSS");
+				PackAddInt64(p, "session_key", r->NatT_SessionKey);
+				PackAddInt(p, "nat_traversal_version", UDP_NAT_TRAVERSAL_VERSION);
+
+
+				if (g_natt_low_priority)
 				{
-					r->LastDDnsFqdnHash = ddns_hash;
-					// Do the Register immediately if there is a change in the DDNS host name
-					r->NatT_RegisterNextTick = 0;
+					PackAddBool(p, "low_priority", g_natt_low_priority);
 				}
-			}
 
-			if (r->NatT_Token_Ok && g_no_rudp_register == false)
-			{
-				if (r->NatT_RegisterNextTick == 0 || r->Now >= r->NatT_RegisterNextTick)
+				Zero(private_ip_str, sizeof(private_ip_str));
+				if (IsZeroIp(&r->My_Private_IP_Safe) == false)
 				{
-					// Try to register itself periodically for NAT-T server
-					PACK *p = NewPack();
-					BUF *b;
-					char private_ip_str[MAX_SIZE];
-					char machine_key[MAX_SIZE];
-					char machine_name[MAX_SIZE];
-					UCHAR hash[SHA1_SIZE];
-					char ddns_fqdn[MAX_SIZE];
-
-					Debug("NAT-T Registering...\n");
-
-					GetCurrentDDnsFqdn(ddns_fqdn, sizeof(ddns_fqdn));
-
-					PackAddStr(p, "opcode", "nat_t_register");
-					PackAddInt64(p, "tran_id", r->NatT_TranId);
-					PackAddStr(p, "token", r->NatT_Token);
-					PackAddStr(p, "svc_name", r->SvcName);
-					PackAddStr(p, "product_str", CEDAR_PRODUCT_STR);
-					PackAddInt(p, "nat_traversal_version", UDP_NAT_TRAVERSAL_VERSION);
-
-
-					if (g_natt_low_priority)
-					{
-						PackAddBool(p, "low_priority", g_natt_low_priority);
-					}
-
-					Zero(private_ip_str, sizeof(private_ip_str));
-					if (IsZeroIp(&r->My_Private_IP_Safe) == false)
-					{
-						IPToStr(private_ip_str, sizeof(private_ip_str), &r->My_Private_IP_Safe);
-						PackAddStr(p, "private_ip", private_ip_str);
-					}
-
-					PackAddInt(p, "private_port", r->UdpSock->LocalPort);
-
-					Zero(hash, sizeof(hash));
-					GetCurrentMachineIpProcessHash(hash);
-					BinToStr(machine_key, sizeof(machine_key), hash, sizeof(hash));
-					PackAddStr(p, "machine_key", machine_key);
-
-					Zero(machine_name, sizeof(machine_name));
-					GetMachineName(machine_name, sizeof(machine_name));
-					PackAddStr(p, "host_name", machine_name);
-					PackAddStr(p, "ddns_fqdn", ddns_fqdn);
-
-					b = PackToBuf(p);
-					FreePack(p);
-
-					RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, b->Buf, b->Size, 0);
-					//RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, "a", 1);
-
-					FreeBuf(b);
-
-					// Determine the next acquisition time
-					r->NatT_RegisterFailNum++;
-					r->NatT_RegisterNextTick = r->Now + (UINT64)UDP_NAT_T_REGISTER_INTERVAL_INITIAL * (UINT64)MIN(r->NatT_RegisterFailNum, UDP_NAT_T_REGISTER_INTERVAL_FAIL_MAX);
-					AddInterrupt(r->Interrupt, r->NatT_RegisterNextTick);
-					r->NatT_Register_Ok = false;
+					IPToStr(private_ip_str, sizeof(private_ip_str), &r->My_Private_IP_Safe);
+					PackAddStr(p, "private_ip", private_ip_str);
 				}
+
+				PackAddInt(p, "private_port", r->UdpSock->LocalPort);
+
+				Zero(hash, sizeof(hash));
+				GetCurrentMachineIpProcessHash(hash);
+				BinToStr(machine_key, sizeof(machine_key), hash, sizeof(hash));
+				PackAddStr(p, "machine_key", machine_key);
+
+				Zero(machine_name, sizeof(machine_name));
+				GetMachineName(machine_name, sizeof(machine_name));
+				PackAddStr(p, "host_name", machine_name);
+				PackAddStr(p, "ddns_fqdn", ddns_fqdn);
+
+				b = PackToBuf(p);
+				FreePack(p);
+
+				RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, b->Buf, b->Size, 0);
+				//RUDPSendPacket(r, &r->NatT_IP_Safe, UDP_NAT_T_PORT, "a", 1);
+
+				FreeBuf(b);
+
+				// Determine the next acquisition time
+				r->NatT_RegisterFailNum++;
+				r->NatT_RegisterNextTick = r->Now + (UINT64)UDP_NAT_T_REGISTER_INTERVAL_INITIAL * (UINT64)MIN(r->NatT_RegisterFailNum, UDP_NAT_T_REGISTER_INTERVAL_FAIL_MAX);
+				AddInterrupt(r->Interrupt, r->NatT_RegisterNextTick);
+				r->NatT_Register_Ok = false;
 			}
 		}
 	}
@@ -1728,8 +1649,17 @@ void RUDPRecvProc(RUDP_STACK *r, UDPPACKET *p)
 		return;
 	}
 
+	if (r->ServerMode)
+	{
+		if (g_no_rudp_server)
+		{
+			return;
+		}
+	}
+
 	if (r->ServerMode && r->NoNatTRegister == false)
 	{
+
 		if (p->SrcPort == UDP_NAT_T_PORT && CmpIpAddr(&p->SrcIP, &r->NatT_IP_Safe) == 0)
 		{
 			// There was a response from the NAT-T server
@@ -1824,6 +1754,11 @@ void RUDPRecvProc(RUDP_STACK *r, UDPPACKET *p)
 				if (LIST_NUM(r->SessionList) >= RUDP_QUOTA_MAX_NUM_SESSIONS)
 				{
 					// Entire number of sessions exceeds the limit
+					ok = false;
+				}
+				else if (r->NatT_EnableSourceIpValidation && RUDPIsIpInValidateList(r, &p->SrcIP) == false)
+				{
+					// Invalid source IP address, which is not registered on the validated source IP address list
 					ok = false;
 				}
 				else
@@ -1940,6 +1875,149 @@ void RUDPRecvProc(RUDP_STACK *r, UDPPACKET *p)
 			}
 		}
 	}
+}
+
+// Check whether the specificed IP address is in the validated source IP address list
+bool RUDPIsIpInValidateList(RUDP_STACK *r, IP *ip)
+{
+	UINT i;
+	UINT64 now = Tick64();
+	LIST *o = NULL;
+	bool ret = false;
+	// Validate arguments
+	if (r == NULL || ip == NULL)
+	{
+		return false;
+	}
+
+	// Always allow private IP addresses
+	if (IsIPPrivate(ip))
+	{
+		return true;
+	}
+
+	if (IsIPAddressInSameLocalNetwork(ip))
+	{
+		return true;
+	}
+
+	for (i = 0;i < LIST_NUM(r->NatT_SourceIpList);i++)
+	{
+		RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(r->NatT_SourceIpList, i);
+
+		if (s->ExpiresTick <= now)
+		{
+			if (o == NULL)
+			{
+				o = NewListFast(NULL);
+			}
+
+			Add(o, s);
+		}
+	}
+
+	if (o != NULL)
+	{
+		for (i = 0;i < LIST_NUM(o);i++)
+		{
+			RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(o, i);
+
+			Delete(r->NatT_SourceIpList, s);
+
+			Free(s);
+		}
+
+		ReleaseList(o);
+	}
+
+	for (i = 0;i < LIST_NUM(r->NatT_SourceIpList);i++)
+	{
+		RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(r->NatT_SourceIpList, i);
+
+		if (CmpIpAddr(&s->ClientIP, ip) == 0)
+		{
+			ret = true;
+			break;
+		}
+	}
+
+	Debug("RUDP: NAT-T: Validate IP: %r, ret=%u (current list len = %u)\n", ip, ret, LIST_NUM(r->NatT_SourceIpList));
+
+	return ret;
+}
+
+// Add an IP address to the validated source IP address list
+void RUDPAddIpToValidateList(RUDP_STACK *r, IP *ip)
+{
+	UINT i;
+	RUDP_SOURCE_IP *sip;
+	UINT64 now = Tick64();
+	LIST *o = NULL;
+	// Validate arguments
+	if (r == NULL || ip == NULL)
+	{
+		return;
+	}
+
+	if (LIST_NUM(r->NatT_SourceIpList) >= RUDP_MAX_VALIDATED_SOURCE_IP_ADDRESSES)
+	{
+		return;
+	}
+
+	for (i = 0;i < LIST_NUM(r->NatT_SourceIpList);i++)
+	{
+		RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(r->NatT_SourceIpList, i);
+
+		if (s->ExpiresTick <= now)
+		{
+			if (o == NULL)
+			{
+				o = NewListFast(NULL);
+			}
+
+			Add(o, s);
+		}
+	}
+
+	if (o != NULL)
+	{
+		for (i = 0;i < LIST_NUM(o);i++)
+		{
+			RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(o, i);
+
+			Delete(r->NatT_SourceIpList, s);
+
+			Free(s);
+		}
+
+		ReleaseList(o);
+	}
+
+	sip = NULL;
+
+	for (i = 0;i < LIST_NUM(r->NatT_SourceIpList);i++)
+	{
+		RUDP_SOURCE_IP *s = (RUDP_SOURCE_IP *)LIST_DATA(r->NatT_SourceIpList, i);
+
+		if (CmpIpAddr(&s->ClientIP, ip) == 0)
+		{
+			sip = s;
+			break;
+		}
+	}
+
+	if (sip == NULL)
+	{
+		sip = ZeroMalloc(sizeof(RUDP_SOURCE_IP));
+
+		Copy(&sip->ClientIP, ip, sizeof(IP));
+
+		Add(r->NatT_SourceIpList, sip);
+	}
+
+	sip->ExpiresTick = now + (UINT64)RUDP_VALIDATED_SOURCE_IP_ADDRESS_EXPIRES;
+
+	Debug("RUDP: NAT-T: Src IP added: %r (current list len = %u)\n", ip, LIST_NUM(r->NatT_SourceIpList));
 }
 
 // R-UDP interrupt processing procedure
@@ -2446,7 +2524,7 @@ void RUDPBulkSend(RUDP_STACK *r, RUDP_SESSION *se, void *data, UINT data_size)
 	CRYPT *c;
 	UCHAR crypt_key_src[SHA1_SIZE * 2];
 	UCHAR crypt_key[SHA1_SIZE];
-	UINT icmp_type;
+	UINT icmp_type = 0;
 	UCHAR sign[SHA1_SIZE];
 	UCHAR iv[SHA1_SIZE + 1];
 	// Validate arguments
@@ -2477,7 +2555,7 @@ void RUDPBulkSend(RUDP_STACK *r, RUDP_SESSION *se, void *data, UINT data_size)
 	Copy(iv, se->BulkNextIv, SHA1_SIZE);
 	Copy(crypt_key_src + 0, se->BulkSendKey->Data, SHA1_SIZE);
 	Copy(crypt_key_src + SHA1_SIZE, iv, SHA1_SIZE);
-	HashSha1(crypt_key, crypt_key_src, SHA1_SIZE * 2);
+	Sha1(crypt_key, crypt_key_src, SHA1_SIZE * 2);
 	c = NewCrypt(crypt_key, sizeof(crypt_key));
 	Encrypt(c, buf + SHA1_SIZE + SHA1_SIZE, buf + SHA1_SIZE + SHA1_SIZE, sizeof(UINT64) + data_size + padding_size);
 	FreeCrypt(c);
@@ -2489,7 +2567,7 @@ void RUDPBulkSend(RUDP_STACK *r, RUDP_SESSION *se, void *data, UINT data_size)
 	if (se->UseHMac == false)
 	{
 		Copy(buf + 0, se->BulkSendKey->Data, SHA1_SIZE);
-		HashSha1(sign, buf, SHA1_SIZE + SHA1_SIZE + sizeof(UINT64) + data_size + padding_size);
+		Sha1(sign, buf, SHA1_SIZE + SHA1_SIZE + sizeof(UINT64) + data_size + padding_size);
 		Copy(buf + 0, sign, SHA1_SIZE);
 	}
 	else
@@ -2516,16 +2594,16 @@ void RUDPBulkSend(RUDP_STACK *r, RUDP_SESSION *se, void *data, UINT data_size)
 // Start a socket for R-UDP Listening
 SOCK *ListenRUDP(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, bool no_natt_register, bool over_dns_mode)
 {
-	return ListenRUDPEx(svc_name, proc_interrupts, proc_rpc_recv, param, port, no_natt_register, over_dns_mode, NULL, 0);
+	return ListenRUDPEx(svc_name, proc_interrupts, proc_rpc_recv, param, port, no_natt_register, over_dns_mode, NULL, 0, NULL);
 }
 SOCK *ListenRUDPEx(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, bool no_natt_register, bool over_dns_mode,
-				   volatile UINT *natt_global_udp_port, UCHAR rand_port_id)
+				   volatile UINT *natt_global_udp_port, UCHAR rand_port_id, IP *listen_ip)
 {
 	SOCK *s;
 	RUDP_STACK *r;
 
 	// Creating a R-UDP stack
-	r = NewRUDPServer(svc_name, proc_interrupts, proc_rpc_recv, param, port, no_natt_register, over_dns_mode, natt_global_udp_port, rand_port_id);
+	r = NewRUDPServer(svc_name, proc_interrupts, proc_rpc_recv, param, port, no_natt_register, over_dns_mode, natt_global_udp_port, rand_port_id, listen_ip);
 	if (r == NULL)
 	{
 		return NULL;
@@ -2612,7 +2690,7 @@ bool RUDPCheckSignOfRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data,
 	// Verification the signature (segment packet)
 	Copy(sign, p, SHA1_SIZE);
 	Copy(p, se->Key_Recv, SHA1_SIZE);
-	HashSha1(sign2, p, recv_size);
+	Sha1(sign2, p, recv_size);
 
 	if (r->Protocol == RUDP_PROTOCOL_DNS || r->Protocol == RUDP_PROTOCOL_ICMP)
 	{
@@ -2635,7 +2713,7 @@ bool RUDPCheckSignOfRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data,
 	{
 		Copy(sign, p, SHA1_SIZE);
 		Copy(p, se->BulkRecvKey->Data, SHA1_SIZE);
-		HashSha1(sign2, p, recv_size);
+		Sha1(sign2, p, recv_size);
 		Copy(p, sign, SHA1_SIZE);
 
 		if (Cmp(sign, sign2, SHA1_SIZE) == 0)
@@ -2687,7 +2765,7 @@ bool RUDPProcessBulkRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data,
 	{
 		Copy(sign, p, SHA1_SIZE);
 		Copy(p, se->BulkRecvKey->Data, SHA1_SIZE);
-		HashSha1(sign2, p, recv_size);
+		Sha1(sign2, p, recv_size);
 		Copy(p, sign, SHA1_SIZE);
 
 		if (Cmp(sign, sign2, SHA1_SIZE) != 0)
@@ -2736,7 +2814,7 @@ bool RUDPProcessBulkRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data,
 	}
 	Copy(keygen + 0, se->BulkRecvKey->Data, SHA1_SIZE);
 	Copy(keygen + SHA1_SIZE, iv, SHA1_SIZE);
-	HashSha1(key, keygen, sizeof(keygen));
+	Sha1(key, keygen, sizeof(keygen));
 
 	c = NewCrypt(key, sizeof(key));
 	Encrypt(c, p, p, size);
@@ -2832,7 +2910,7 @@ bool RUDPProcessRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data, UIN
 	// Validate the signature
 	Copy(sign, p, SHA1_SIZE);
 	Copy(p, se->Key_Recv, SHA1_SIZE);
-	HashSha1(sign2, p, recv_size);
+	Sha1(sign2, p, recv_size);
 	Copy(p, sign, SHA1_SIZE);
 
 	if (r->Protocol == RUDP_PROTOCOL_DNS || r->Protocol == RUDP_PROTOCOL_ICMP)
@@ -2864,7 +2942,7 @@ bool RUDPProcessRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data, UIN
 	}
 	Copy(keygen + 0, iv, SHA1_SIZE);
 	Copy(keygen + SHA1_SIZE, se->Key_Recv, SHA1_SIZE);
-	HashSha1(key, keygen, sizeof(keygen));
+	Sha1(key, keygen, sizeof(keygen));
 
 	c = NewCrypt(key, sizeof(key));
 	Encrypt(c, p, p, size);
@@ -3427,13 +3505,13 @@ void RUDPSendSegmentNow(RUDP_STACK *r, RUDP_SESSION *se, UINT64 seq_no, void *da
 	// Encrypt
 	Copy(keygen + 0, iv, SHA1_SIZE);
 	Copy(keygen + SHA1_SIZE, se->Key_Send, SHA1_SIZE);
-	HashSha1(key, keygen, sizeof(keygen));
+	Sha1(key, keygen, sizeof(keygen));
 	c = NewCrypt(key, sizeof(key));
 	Encrypt(c, dst + SHA1_SIZE * 2, dst + SHA1_SIZE * 2, current_size - (SHA1_SIZE * 2));
 	FreeCrypt(c);
 
 	// Sign
-	HashSha1(sign, dst, current_size);
+	Sha1(sign, dst, current_size);
 	if (r->Protocol == RUDP_PROTOCOL_DNS || r->Protocol == RUDP_PROTOCOL_ICMP)
 	{
 		XorData(sign, sign, r->SvcNameHash, SHA1_SIZE);
@@ -3593,26 +3671,26 @@ RUDP_SESSION *RUDPNewSession(bool server_mode, IP *my_ip, UINT my_port, IP *your
 	b = NewBuf();
 	WriteBuf(b, init_key, SHA1_SIZE);
 	WriteBufStr(b, "zurukko");
-	HashSha1(key1, b->Buf, b->Size);
+	Sha1(key1, b->Buf, b->Size);
 	FreeBuf(b);
 
 	b = NewBuf();
 	WriteBuf(b, init_key, SHA1_SIZE);
 	WriteBuf(b, key1, SHA1_SIZE);
 	WriteBufStr(b, "yasushineko");
-	HashSha1(key2, b->Buf, b->Size);
+	Sha1(key2, b->Buf, b->Size);
 	FreeBuf(b);
 
 	// Generate the magic number for the KeepAlive
 	b = NewBuf();
 	WriteBuf(b, init_key, SHA1_SIZE);
 	WriteBufStr(b, "Magic_KeepAliveRequest");
-	HashSha1(se->Magic_KeepAliveRequest, b->Buf, b->Size);
+	Sha1(se->Magic_KeepAliveRequest, b->Buf, b->Size);
 	FreeBuf(b);
 	b = NewBuf();
 	WriteBuf(b, init_key, SHA1_SIZE);
 	WriteBufStr(b, "Magic_KeepAliveResponse");
-	HashSha1(se->Magic_KeepAliveResponse, b->Buf, b->Size);
+	Sha1(se->Magic_KeepAliveResponse, b->Buf, b->Size);
 	FreeBuf(b);
 
 	if (server_mode == false)
@@ -3774,7 +3852,7 @@ void RUDPMainThread(THREAD *thread, void *param)
 							{
 								UCHAR hash[SHA1_SIZE];
 
-								HashSha1(hash, ((UCHAR *)p->Data) + ip_header_size + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO) + SHA1_SIZE,
+								Sha1(hash, ((UCHAR *)p->Data) + ip_header_size + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO) + SHA1_SIZE,
 									p->Size - (ip_header_size + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO) + SHA1_SIZE));
 
 								if (Cmp(hash, ((UCHAR *)p->Data) + ip_header_size + sizeof(ICMP_HEADER) + sizeof(ICMP_ECHO), SHA1_SIZE) == 0)
@@ -3912,7 +3990,7 @@ void RUDPMainThread(THREAD *thread, void *param)
 				Copy(icmp_data, p->Data, p->Size);
 
 				// Hash
-				HashSha1(hash, icmp_data, p->Size);
+				Sha1(hash, icmp_data, p->Size);
 
 				// Checksum calculation
 				icmp_header->Checksum = IpChecksum(dst_data, dst_size);
@@ -4088,7 +4166,7 @@ void RUDPGetRegisterHostNameByIP(char *dst, UINT size, IP *ip)
 	{
 		UCHAR hash[SHA1_SIZE];
 
-		HashSha1(hash, ip->addr, 4);
+		Sha1(hash, ip->addr, 4);
 		BinToStr(tmp, sizeof(tmp), hash, 2);
 	}
 	else
@@ -4101,7 +4179,7 @@ void RUDPGetRegisterHostNameByIP(char *dst, UINT size, IP *ip)
 	StrLower(tmp);
 	Format(dst, size,
 		(IsUseAlternativeHostname() ? UDP_NAT_T_SERVER_TAG_ALT : UDP_NAT_T_SERVER_TAG),
-		tmp[0], tmp[1], tmp[2], tmp[3]);
+		tmp[2], tmp[3]);
 
 
 	if (false)
@@ -4168,6 +4246,7 @@ void RUDPIpQueryThread(THREAD *thread, void *param)
 	void *route_change_poller = NULL;
 	char current_hostname[MAX_SIZE];
 	bool last_time_ip_changed = false;
+	UINT num_retry = 0;
 	// Validate arguments
 	if (thread == NULL || param == NULL)
 	{
@@ -4247,7 +4326,9 @@ void RUDPIpQueryThread(THREAD *thread, void *param)
 
 			if (IsZeroIp(&r->NatT_IP))
 			{
-				next_getip_tick = now + (UINT64)UDP_NAT_T_GET_IP_INTERVAL;
+				num_retry++;
+
+				next_getip_tick = now + MIN((UINT64)UDP_NAT_T_GET_IP_INTERVAL * (UINT64)num_retry, (UINT64)UDP_NAT_T_GET_IP_INTERVAL_MAX);
 			}
 			else
 			{
@@ -4274,7 +4355,7 @@ void RUDPIpQueryThread(THREAD *thread, void *param)
 		{
 			IP ip;
 
-			if (GetMyPrivateIP(&ip))
+			if (GetMyPrivateIP(&ip, false))
 			{
 				Lock(r->Lock);
 				{
@@ -4323,7 +4404,7 @@ UINT GenRandInterval(UINT min, UINT max)
 }
 
 // Identify the private IP of the interface which is used to connect to the Internet currently
-bool GetMyPrivateIP(IP *ip)
+bool GetMyPrivateIP(IP *ip, bool from_vg)
 {
 	SOCK *s;
 	IP t;
@@ -4334,11 +4415,6 @@ bool GetMyPrivateIP(IP *ip)
 		return false;
 	}
 
-	if (IsUseAlternativeHostname())
-	{
-		hostname = UDP_NAT_T_GET_PRIVATE_IP_TCP_SERVER_ALT;
-	}
-
 	s = ConnectEx(hostname, UDP_NAT_T_PORT_FOR_TCP_1, UDP_NAT_T_GET_PRIVATE_IP_CONNECT_TIMEOUT);
 
 	if (s == NULL)
@@ -4347,7 +4423,7 @@ bool GetMyPrivateIP(IP *ip)
 
 		if (s == NULL)
 		{
-			s = ConnectEx(hostname, UDP_NAT_T_PORT_FOR_TCP_3, UDP_NAT_T_GET_PRIVATE_IP_CONNECT_TIMEOUT);
+			s = ConnectEx(GetRandHostNameForGetMyPrivateIP(), UDP_NAT_T_PORT_FOR_TCP_1, UDP_NAT_T_GET_PRIVATE_IP_CONNECT_TIMEOUT);
 
 			if (s == NULL)
 			{
@@ -4369,6 +4445,18 @@ bool GetMyPrivateIP(IP *ip)
 	Copy(ip, &t, sizeof(IP));
 
 	return true;
+}
+char *GetRandHostNameForGetMyPrivateIP()
+{
+	char *hosts[] =
+	{
+		"www.microsoft.com",
+		"www.yahoo.com",
+		"www.bing.com",
+	};
+	UINT num_hosts = 3;
+
+	return hosts[Rand32() % num_hosts];
 }
 
 // Function to wait until changing any IP address of the host or expiring the specified time or waking the event
@@ -4546,22 +4634,6 @@ bool IsIPLocalHostOrMySelf(IP *ip)
 	return ret;
 }
 
-// Get the results of the port number that is determined at random
-UINT RUDPGetRandPortNumber(UCHAR rand_port_id)
-{
-	UINT ret;
-	// Validate arguments
-	if (rand_port_id == 0)
-	{
-		return 0;
-	}
-
-	ret = rand_port_numbers[rand_port_id];
-
-	Debug("rand_port_id[%u] = %u\n", rand_port_id, ret);
-	return ret;
-}
-
 // Obtain the hash value of combining all of the IP address assigned to the host
 UINT GetHostIPAddressHash32()
 {
@@ -4589,7 +4661,7 @@ UINT GetHostIPAddressHash32()
 
 	WriteBuf(b, rand_port_numbers, sizeof(rand_port_numbers));
 
-	HashSha1(hash, b->Buf, b->Size);
+	Sha1(hash, b->Buf, b->Size);
 
 	FreeBuf(b);
 
@@ -4700,6 +4772,9 @@ SOCK *NewRUDPClientNatT(char *svc_name, IP *ip, UINT *error_code, UINT timeout, 
 	SOCK *sock;
 	bool same_lan = false;
 	char hostname[MAX_SIZE];
+
+
+
 	if (timeout == 0)
 	{
 		timeout = RUDP_TIMEOUT;
@@ -4759,6 +4834,7 @@ SOCK *NewRUDPClientNatT(char *svc_name, IP *ip, UINT *error_code, UINT timeout, 
 		UINT result_port;
 		SOCK *ret = NULL;
 		UINT num_tries = 0;
+		UINT64 current_cookie = 0;
 
 		AddInterrupt(interrupt, giveup_tick);
 
@@ -4828,10 +4904,17 @@ LABEL_TIMEOUT:
 						WriteBuf(b, tmp, r);
 						SeekBuf(b, 0, 0);
 
+
 						p = BufToPack(b);
 
 						if (p != NULL)
 						{
+							UINT64 cookie = PackGetInt64(p, "cookie");
+							if (cookie != 0)
+							{
+								current_cookie = cookie;
+							}
+
 							// Compare tran_id
 							if (PackGetInt64(p, "tran_id") == tran_id)
 							{
@@ -4901,6 +4984,7 @@ LABEL_TIMEOUT:
 				PackAddInt64(p, "tran_id", tran_id);
 				IPToStr(ip_str, sizeof(ip_str), ip);
 				PackAddStr(p, "dest_ip", ip_str);
+				PackAddInt64(p, "cookie", current_cookie);
 				if (IsEmptyStr(hint_str) == false)
 				{
 					PackAddStr(p, "hint", hint_str);
@@ -4915,6 +4999,7 @@ LABEL_TIMEOUT:
 
 				b = PackToBuf(p);
 				FreePack(p);
+
 				SendTo(sock, &nat_t_ip, UDP_NAT_T_PORT, b->Buf, b->Size);
 				FreeBuf(b);
 
@@ -4967,15 +5052,19 @@ LABEL_TIMEOUT:
 				sock, sock_event, 0, false);
 		}
 
-		if (sock != NULL)
-		{
-			Disconnect(sock);
-			ReleaseSock(sock);
-		}
-
 		if (sock_event != NULL)
 		{
 			ReleaseSockEvent(sock_event);
+		}
+
+		if (sock != NULL)
+		{
+			if (ret == NULL)
+			{
+				Disconnect(sock);
+			}
+
+			ReleaseSock(sock);
 		}
 
 		return ret;
@@ -5024,7 +5113,7 @@ SOCK *NewRUDPClientDirect(char *svc_name, IP *ip, UINT port, UINT *error_code, U
 		return NULL;
 	}
 
-	r = NewRUDP(false, svc_name, NULL, NULL, NULL, local_port, sock, sock_event, false, over_dns_mode, ip, NULL, 0);
+	r = NewRUDP(false, svc_name, NULL, NULL, NULL, local_port, sock, sock_event, false, over_dns_mode, ip, NULL, 0, NULL);
 	if (r == NULL)
 	{
 		*error_code = RUDP_ERROR_UNKNOWN;
@@ -5083,7 +5172,7 @@ SOCK *NewRUDPClientDirect(char *svc_name, IP *ip, UINT port, UINT *error_code, U
 }
 
 // Creating a R-UDP server
-RUDP_STACK *NewRUDPServer(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, bool no_natt_register, bool over_dns_mode, volatile UINT *natt_global_udp_port, UCHAR rand_port_id)
+RUDP_STACK *NewRUDPServer(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, bool no_natt_register, bool over_dns_mode, volatile UINT *natt_global_udp_port, UCHAR rand_port_id, IP *listen_ip)
 {
 	RUDP_STACK *r;
 	// Validate arguments
@@ -5099,7 +5188,7 @@ RUDP_STACK *NewRUDPServer(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_inter
 
 	ListenTcpForPopupFirewallDialog();
 
-	r = NewRUDP(true, svc_name, proc_interrupts, proc_rpc_recv, param, port, NULL, NULL, no_natt_register, over_dns_mode, NULL, natt_global_udp_port, rand_port_id);
+	r = NewRUDP(true, svc_name, proc_interrupts, proc_rpc_recv, param, port, NULL, NULL, no_natt_register, over_dns_mode, NULL, natt_global_udp_port, rand_port_id, listen_ip);
 
 	if (r == NULL)
 	{
@@ -5110,7 +5199,7 @@ RUDP_STACK *NewRUDPServer(char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_inter
 }
 
 // Creating a R-UDP
-RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, SOCK *sock, SOCK_EVENT *sock_event, bool server_no_natt_register, bool over_dns_mode, IP *client_target_ip, volatile UINT *natt_global_udp_port, UCHAR rand_port_id)
+RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC *proc_interrupts, RUDP_STACK_RPC_RECV_PROC *proc_rpc_recv, void *param, UINT port, SOCK *sock, SOCK_EVENT *sock_event, bool server_no_natt_register, bool over_dns_mode, IP *client_target_ip, volatile UINT *natt_global_udp_port, UCHAR rand_port_id, IP *listen_ip)
 {
 	RUDP_STACK *r;
 	char tmp[MAX_SIZE];
@@ -5136,11 +5225,11 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 		{
 			if (rand_port_id == 0)
 			{
-				sock = NewUDP(port);
+				sock = NewUDPEx2(port, false, listen_ip);
 			}
 			else
 			{
-				sock = NewUDPEx2RandMachineAndExePath(false, NULL, 0, rand_port_id);
+				sock = NewUDPEx2RandMachineAndExePath(false, listen_ip, 0, rand_port_id);
 			}
 		}
 
@@ -5175,6 +5264,8 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 
 	r = ZeroMalloc(sizeof(RUDP_STACK));
 
+	r->NatT_SessionKey = Rand64();
+
 	StrCpy(r->SvcName, sizeof(r->SvcName), svc_name);
 	r->RandPortId = rand_port_id;
 	r->NatTGlobalUdpPort = natt_global_udp_port;
@@ -5194,11 +5285,13 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 	r->NewSockQueue = NewQueue();
 	r->NatT_TranId = Rand64();
 
+	r->NatT_SourceIpList = NewListFast(NULL);
+
 	StrCpy(tmp, sizeof(tmp), r->SvcName);
 	Trim(tmp);
 	StrLower(tmp);
 
-	HashSha1(r->SvcNameHash, tmp, StrLen(tmp));
+	Sha1(r->SvcNameHash, tmp, StrLen(tmp));
 
 	r->Client_IcmpId = (USHORT)(Rand32() % 65534 + 1);
 	r->Client_IcmpSeqNo = (USHORT)(Rand32() % 65534 + 1);
@@ -5217,7 +5310,7 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 #endif	// OS_WIN32
 
 		pid = Endian32(pid);
-		HashSha1(pid_hash, &pid, sizeof(UINT));
+		Sha1(pid_hash, &pid, sizeof(UINT));
 
 		pid_us = READ_USHORT(pid_hash);
 		if (pid_us == 0 || pid_us == 0xFFFF)
@@ -5243,7 +5336,11 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 		}
 	}
 
-	RUDPGetRegisterHostNameByIP(r->CurrentRegisterHostname, sizeof(r->CurrentRegisterHostname), NULL);
+	if (true
+		)
+	{
+		RUDPGetRegisterHostNameByIP(r->CurrentRegisterHostname, sizeof(r->CurrentRegisterHostname), NULL);
+	}
 
 	if (r->ServerMode)
 	{
@@ -5251,7 +5348,8 @@ RUDP_STACK *NewRUDP(bool server_mode, char *svc_name, RUDP_STACK_INTERRUPTS_PROC
 		r->ProcRpcRecv = proc_rpc_recv;
 	}
 
-	if (r->ServerMode && r->NoNatTRegister == false)
+	if (r->ServerMode && r->NoNatTRegister == false
+		)
 	{
 		r->IpQueryThread = NewThread(RUDPIpQueryThread, r);
 	}
@@ -5324,8 +5422,11 @@ void FreeRUDP(RUDP_STACK *r)
 
 	if (r->ServerMode && r->NoNatTRegister == false)
 	{
-		WaitThread(r->IpQueryThread, INFINITE);
-		ReleaseThread(r->IpQueryThread);
+		if (r->IpQueryThread != NULL)
+		{
+			WaitThread(r->IpQueryThread, INFINITE);
+			ReleaseThread(r->IpQueryThread);
+		}
 	}
 
 	WaitThread(r->Thread, INFINITE);
@@ -5358,6 +5459,15 @@ void FreeRUDP(RUDP_STACK *r)
 		Disconnect(s);
 		ReleaseSock(s);
 	}
+
+	for (i = 0;i < LIST_NUM(r->NatT_SourceIpList);i++)
+	{
+		RUDP_SOURCE_IP *sip = (RUDP_SOURCE_IP *)LIST_DATA(r->NatT_SourceIpList, i);
+
+		Free(sip);
+	}
+
+	ReleaseList(r->NatT_SourceIpList);
 
 	ReleaseQueue(r->NewSockQueue);
 
@@ -5454,7 +5564,7 @@ void GetCurrentMachineIpProcessHashInternal(void *hash)
 	}
 	FreeHostIPAddressList(ip_list);
 
-	HashSha1(hash, b->Buf, b->Size);
+	Sha1(hash, b->Buf, b->Size);
 
 	FreeBuf(b);
 
@@ -5528,10 +5638,6 @@ bool NewTcpPair(SOCK **s1, SOCK **s2)
 }
 
 // Listen in any available port
-SOCK *ListenAnyPortEx(bool local_only)
-{
-	return ListenAnyPortEx2(local_only, false);
-}
 SOCK *ListenAnyPortEx2(bool local_only, bool disable_ca)
 {
 	UINT i;
@@ -5548,24 +5654,69 @@ SOCK *ListenAnyPortEx2(bool local_only, bool disable_ca)
 	return NULL;
 }
 
-int cb_test(int a, X509_STORE_CTX *ctx)
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define X509_STORE_CTX_get0_cert(o) ((o)->cert)
+#endif
+
+// Verify client SSL certificate during TLS handshake.
+//
+// (actually, only save the certificate for later authentication in Protocol.c)
+int SslCertVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
 {
-	WHERE;
-	return 1;
+	SSL *ssl;
+	struct SslClientCertInfo *clientcert;
+	X509 *cert;
+
+	ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+	clientcert = SSL_get_ex_data(ssl, GetSslClientCertIndex());
+
+	if (clientcert != NULL)
+	{
+		clientcert->PreverifyErr = X509_STORE_CTX_get_error(ctx);
+		clientcert->PreverifyErrMessage[0] = '\0';
+		if (!preverify_ok)
+		{
+			const char *msg = X509_verify_cert_error_string(clientcert->PreverifyErr);
+			StrCpy(clientcert->PreverifyErrMessage, PREVERIFY_ERR_MESSAGE_SIZE, msg);
+			Debug("SslCertVerifyCallback preverify error: '%s'\n", msg);
+		}
+		else
+		{
+			cert = X509_STORE_CTX_get0_cert(ctx);
+			if (cert != NULL)
+			{
+				X *tmpX = X509ToX(cert); // this only wraps cert, but we need to make a copy
+				X *copyX = CloneX(tmpX);
+				tmpX->do_not_free = true; // do not release inner X509 object
+				FreeX(tmpX);
+				clientcert->X = copyX;
+			}
+		}
+	}
+
+	return 1; /* allow the verification process to continue */
 }
 
 // Create a new SSL pipe
 SSL_PIPE *NewSslPipe(bool server_mode, X *x, K *k, DH_CTX *dh)
 {
+	return NewSslPipeEx(server_mode, x, k, dh, false, NULL);
+}
+
+// Create a new SSL pipe with extended options
+SSL_PIPE *NewSslPipeEx(bool server_mode, X *x, K *k, DH_CTX *dh, bool verify_peer, struct SslClientCertInfo *clientcert)
+{
 	SSL_PIPE *s;
 	SSL *ssl;
-	SSL_CTX *ssl_ctx = NewSSLCtx();
+	SSL_CTX *ssl_ctx = NewSSLCtx(server_mode);
 
 	Lock(openssl_lock);
 	{
 		if (server_mode)
 		{
-			SSL_CTX_set_ssl_version(ssl_ctx, TLSv1_server_method());
+			SSL_CTX_set_ssl_version(ssl_ctx, SSLv23_method());
+			SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
 
 			AddChainSslCertOnDirectory(ssl_ctx);
 
@@ -5576,17 +5727,27 @@ SSL_PIPE *NewSslPipe(bool server_mode, X *x, K *k, DH_CTX *dh)
 		}
 		else
 		{
-			SSL_CTX_set_ssl_version(ssl_ctx, TLSv1_client_method());
+			SSL_CTX_set_ssl_version(ssl_ctx, SSLv23_client_method());
 		}
 
-		//SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, cb_test);
+		if (verify_peer)
+		{
+			SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, SslCertVerifyCallback);
+		}
 
 		if (dh != NULL)
 		{
 			SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_DH_USE);
 		}
 
+		if (server_mode == false)
+		{
+			SSL_CTX_set_options(ssl_ctx, SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS);
+		}
+
 		ssl = SSL_new(ssl_ctx);
+
+		SSL_set_ex_data(ssl, GetSslClientCertIndex(), clientcert);
 	}
 	Unlock(openssl_lock);
 
@@ -6078,65 +6239,11 @@ typedef struct WIN32_ACCEPT_CHECK_DATA
 	bool Rejected;
 } WIN32_ACCEPT_CHECK_DATA;
 
-// Function for determining  whether accept or not in Win32
-int CALLBACK Win32AcceptCheckCallback_Delay(LPWSABUF lpCallerId, LPWSABUF lpCallerData, LPQOS pQos,
-									  LPQOS lpGQOS, LPWSABUF lpCalleeId, LPWSABUF lpCalleeData,
-									  GROUP FAR * g, DWORD_PTR dwCallbackData)
-{
-	return CF_DEFER;
-}
-
 int CALLBACK Win32AcceptCheckCallback(LPWSABUF lpCallerId, LPWSABUF lpCallerData, LPQOS pQos,
 									  LPQOS lpGQOS, LPWSABUF lpCalleeId, LPWSABUF lpCalleeData,
 									  GROUP FAR * g, DWORD_PTR dwCallbackData)
 {
 	return CF_ACCEPT;
-}
-
-// Accept function for Win32
-SOCKET Win32Accept_XP(SOCK *sock, SOCKET s, struct sockaddr *addr, int *addrlen, bool ipv6)
-{
-	SOCKET ret;
-	WIN32_ACCEPT_CHECK_DATA d;
-	UINT err;
-	int initial_addrlen = *addrlen;
-	UINT num_error = 0;
-	// Validate arguments
-	if (s == INVALID_SOCKET)
-	{
-		return INVALID_SOCKET;
-	}
-
-L_LOOP:
-
-	Zero(&d, sizeof(d));
-
-	d.IsIPv6 = ipv6;
-
-	*addrlen = initial_addrlen;
-	Zero(addr, initial_addrlen);
-	ret = WSAAccept(s, addr, addrlen, Win32AcceptCheckCallback, (DWORD_PTR)&d);
-
-	if (ret == INVALID_SOCKET)
-	{
-		err = WSAGetLastError();
-
-		num_error++;
-
-		Debug("!!! WSAAccept Error: %u  rej=%u  num=%u  tick=%I64u\n", WSAGetLastError(), d.Rejected, num_error, Tick64());
-
-		if (d.Rejected && err == WSAECONNREFUSED)
-		{
-			goto L_LOOP;
-		}
-
-		if (err == WSAETIMEDOUT)
-		{
-			goto L_LOOP;
-		}
-	}
-
-	return ret;
 }
 
 // Accept function for Win32
@@ -6222,38 +6329,6 @@ L_LOOP:
 }
 
 #endif	// OS_WIN32
-
-
-// Get whether the aquirement of the Process ID of the TCP connection succeed
-bool CanGetTcpProcessId()
-{
-	UINT i;
-	bool ret = false;
-	LIST *o = GetTcpTableList();
-
-	if (o == NULL)
-	{
-		return false;
-	}
-
-	for (i = 0;i < LIST_NUM(o);i++)
-	{
-		TCPTABLE *t = LIST_DATA(o, i);
-
-		if (t->ProcessId != 0)
-		{
-			ret = true;
-			break;
-		}
-	}
-
-	FreeTcpTableList(o);
-
-	return ret;
-}
-
-
-
 
 #define	USE_OLD_GETIP
 
@@ -6391,32 +6466,6 @@ bool IsSubnetMask6(IP *a)
 	return false;
 }
 
-// Generate a global address from the MAC address
-void GenerateEui64GlobalAddress(IP *ip, IP *prefix, IP *subnet, UCHAR *mac)
-{
-	UCHAR tmp[8];
-	IP a;
-	IP subnet_not;
-	IP or1, or2;
-	// Validate arguments
-	if (ip == NULL || prefix == NULL || subnet == NULL || mac == NULL)
-	{
-		return;
-	}
-
-	GenerateEui64Address6(tmp, mac);
-
-	ZeroIP6(&a);
-
-	Copy(&a.ipv6_addr[8], tmp, 8);
-
-	IPNot6(&subnet_not, subnet);
-	IPAnd6(&or1, &a, &subnet_not);
-	IPAnd6(&or2, prefix, subnet);
-
-	IPOr6(ip, &or1, &or2);
-}
-
 // Generate a local address from the MAC address
 void GenerateEui64LocalAddress(IP *a, UCHAR *mac)
 {
@@ -6518,68 +6567,13 @@ bool IsInSameNetwork4(IP *a1, IP *a2, IP *subnet)
 
 	return false;
 }
-
-// Check whether it is a network address prefix
-bool IsNetworkAddress6(IP *ip, IP *subnet)
+bool IsInSameNetwork4Standard(IP *a1, IP *a2)
 {
-	return IsNetworkPrefixAddress6(ip, subnet);
-}
-bool IsNetworkPrefixAddress6(IP *ip, IP *subnet)
-{
-	IP host;
-	// Validate arguments
-	if (ip == NULL || subnet == NULL)
-	{
-		return false;
-	}
+	IP subnet;
 
-	if (IsIP6(ip) == false || IsIP6(subnet) == false)
-	{
-		return false;
-	}
+	SetIP(&subnet, 255, 255, 0, 0);
 
-	GetHostAddress6(&host, ip, subnet);
-
-	if (IsZeroIp(&host))
-	{
-		return true;
-	}
-
-	return false;
-}
-
-// Check whether the unicast address is available
-bool CheckUnicastAddress(IP *ip)
-{
-	// Validate arguments
-	if (ip == NULL)
-	{
-		return false;
-	}
-
-	if ((GetIPAddrType6(ip) & IPV6_ADDR_UNICAST) == 0)
-	{
-		return false;
-	}
-
-	return true;
-}
-
-// Get the host address
-void GetHostAddress6(IP *dst, IP *ip, IP *subnet)
-{
-	IP not;
-	// Validate arguments
-	if (dst == NULL || ip == NULL || subnet == NULL)
-	{
-		return;
-	}
-
-	IPNot6(&not, subnet);
-
-	IPAnd6(dst, ip, &not);
-
-	dst->ipv6_scope_id = ip->ipv6_scope_id;
+	return IsInSameNetwork4(a1, a2, &subnet);
 }
 
 // Get the prefix address
@@ -6594,52 +6588,6 @@ void GetPrefixAddress6(IP *dst, IP *ip, IP *subnet)
 	IPAnd6(dst, ip, subnet);
 
 	dst->ipv6_scope_id = ip->ipv6_scope_id;
-}
-
-// Get the solicited-node multicast address
-void GetSoliciationMulticastAddr6(IP *dst, IP *src)
-{
-	IP prefix;
-	IP mask104;
-	IP or1, or2;
-
-	// Validate arguments
-	if (dst == NULL || src == NULL)
-	{
-		return;
-	}
-
-	ZeroIP6(&prefix);
-	prefix.ipv6_addr[0] = 0xff;
-	prefix.ipv6_addr[1] = 0x02;
-	prefix.ipv6_addr[11] = 0x01;
-	prefix.ipv6_addr[12] = 0xff;
-
-	IntToSubnetMask6(&mask104, 104);
-
-	IPAnd6(&or1, &prefix, &mask104);
-	IPAnd6(&or2, src, &mask104);
-
-	IPOr6(dst, &or1, &or2);
-
-	dst->ipv6_scope_id = src->ipv6_scope_id;
-}
-
-// Generate a MAC address corresponding to the multicast address
-void GenerateMulticastMacAddress6(UCHAR *mac, IP *ip)
-{
-	// Validate arguments
-	if (mac == NULL)
-	{
-		return;
-	}
-
-	mac[0] = 0x33;
-	mac[1] = 0x33;
-	mac[2] = ip->ipv6_addr[12];
-	mac[3] = ip->ipv6_addr[13];
-	mac[4] = ip->ipv6_addr[14];
-	mac[5] = ip->ipv6_addr[15];
 }
 
 // Get the type of the IPv6 address
@@ -6727,24 +6675,6 @@ UINT GetIPAddrType6(IP *ip)
 	return ret;
 }
 
-// Address that all of the bits are set
-void GetAllFilledAddress6(IP *ip)
-{
-	UINT i;
-	// Validate arguments
-	if (ip == NULL)
-	{
-		return;
-	}
-
-	ZeroIP6(ip);
-
-	for (i = 0;i < 15;i++)
-	{
-		ip->ipv6_addr[i] = 0xff;
-	}
-}
-
 // Loopback address
 void GetLoopbackAddress6(IP *ip)
 {
@@ -6792,35 +6722,6 @@ void GetAllRouterMulticastAddress6(IP *ip)
 }
 
 // Logical operation of the IPv4 address
-void IPNot4(IP *dst, IP *a)
-{
-	UINT i;
-	// Validate arguments
-	if (dst == NULL || a == NULL || IsIP4(a) == false)
-	{
-		Zero(dst, sizeof(IP));
-		return;
-	}
-
-	i = IPToUINT(a);
-	i = ~i;
-
-	UINTToIP(dst, i);
-}
-void IPOr4(IP *dst, IP *a, IP *b)
-{
-	UINT i;
-	// Validate arguments
-	if (dst == NULL || a == NULL || b == NULL || IsIP4(a) == false || IsIP4(b) == false)
-	{
-		Zero(dst, sizeof(IP));
-		return;
-	}
-
-	i = IPToUINT(a) | IPToUINT(b);
-
-	UINTToIP(dst, i);
-}
 void IPAnd4(IP *dst, IP *a, IP *b)
 {
 	UINT i;
@@ -6851,38 +6752,6 @@ void IPAnd6(IP *dst, IP *a, IP *b)
 	for (i = 0;i < 16;i++)
 	{
 		dst->ipv6_addr[i] = a->ipv6_addr[i] & b->ipv6_addr[i];
-	}
-}
-void IPOr6(IP *dst, IP *a, IP *b)
-{
-	UINT i;
-	// Validate arguments
-	if (dst == NULL || IsIP6(a) == false || IsIP6(b) == false)
-	{
-		ZeroIP6(dst);
-		return;
-	}
-
-	ZeroIP6(dst);
-	for (i = 0;i < 16;i++)
-	{
-		dst->ipv6_addr[i] = a->ipv6_addr[i] | b->ipv6_addr[i];
-	}
-}
-void IPNot6(IP *dst, IP *a)
-{
-	UINT i;
-	// Validate arguments
-	if (dst == NULL || IsIP6(a) == false)
-	{
-		ZeroIP6(dst);
-		return;
-	}
-
-	ZeroIP6(dst);
-	for (i = 0;i < 16;i++)
-	{
-		dst->ipv6_addr[i] = ~(a->ipv6_addr[i]);
 	}
 }
 
@@ -6965,7 +6834,7 @@ void IPToStr6Inner(char *str, IP *ip)
 		values[i] = Endian16(values[i]);
 	}
 
-	// Search for omitable part
+	// Search for omittable part
 	zero_started_index = INFINITE;
 	max_zero_len = 0;
 	max_zero_start = INFINITE;
@@ -7066,7 +6935,7 @@ bool StrToIP6(IP *ip, char *str)
 	if (StartWith(tmp, "[") && EndWith(tmp, "]"))
 	{
 		// If the string is enclosed in square brackets, remove brackets
-		StrCpy(tmp, sizeof(tmp), &tmp[1]);
+		StrCpyAllowOverlap(tmp, sizeof(tmp), &tmp[1]);
 
 		if (StrLen(tmp) >= 1)
 		{
@@ -7475,471 +7344,6 @@ bool IsIP4(IP *ip)
 	return (IsIP6(ip) ? false : true);
 }
 
-// Examine whether the version of the two IP addresses are same
-bool IsSameIPVer(IP *ip1, IP *ip2)
-{
-	// Validate arguments
-	if (ip1 == NULL || ip2 == NULL)
-	{
-		return false;
-	}
-
-	if (IsIP4(ip1) && IsIP4(ip2))
-	{
-		return true;
-	}
-
-	if (IsIP6(ip1) && IsIP6(ip2))
-	{
-		return true;
-	}
-
-	return false;
-}
-
-// Copy the IP address
-void CopyIP(IP *dst, IP *src)
-{
-	Copy(dst, src, sizeof(IP));
-}
-
-// Check the length of the IPv6 subnet
-bool CheckSubnetLength6(UINT i)
-{
-	if (i >= 1 && i <= 127)
-	{
-		return true;
-	}
-
-	return false;
-}
-
-// Get the process ID of the corresponding TCP connection by the socket
-UINT GetTcpProcessIdFromSocket(SOCK *s)
-{
-	LIST *o;
-	TCPTABLE *t;
-	UINT pid = 0;
-	// Validate arguments
-	if (s == NULL)
-	{
-		return 0;
-	}
-
-	o = GetTcpTableList();
-	if (o == NULL)
-	{
-		return 0;
-	}
-
-	t = GetTcpTableFromEndPoint(o, &s->LocalIP, s->LocalPort,
-		&s->RemoteIP, s->RemotePort);
-
-	if (t != NULL)
-	{
-		pid = t->ProcessId;
-	}
-
-	FreeTcpTableList(o);
-
-	return pid;
-}
-UINT GetTcpProcessIdFromSocketReverse(SOCK *s)
-{
-	LIST *o;
-	TCPTABLE *t;
-	UINT pid = 0;
-	// Validate arguments
-	if (s == NULL)
-	{
-		return 0;
-	}
-
-	o = GetTcpTableList();
-	if (o == NULL)
-	{
-		return 0;
-	}
-
-	t = GetTcpTableFromEndPoint(o, &s->RemoteIP, s->RemotePort,
-		&s->LocalIP, s->LocalPort);
-
-	if (t != NULL)
-	{
-		pid = t->ProcessId;
-	}
-
-	FreeTcpTableList(o);
-
-	return pid;
-}
-
-// Search in the TCP table by the end point
-TCPTABLE *GetTcpTableFromEndPoint(LIST *o, IP *local_ip, UINT local_port, IP *remote_ip, UINT remote_port)
-{
-	IP local;
-	UINT i;
-	// Validate arguments
-	if (o == NULL)
-	{
-		return NULL;
-	}
-
-	SetIP(&local, 127, 0, 0, 1);
-
-	if (local_ip == NULL)
-	{
-		local_ip = &local;
-	}
-
-	if (remote_ip == NULL)
-	{
-		remote_ip = &local;
-	}
-
-	for (i = 0;i < LIST_NUM(o);i++)
-	{
-		TCPTABLE *t = LIST_DATA(o, i);
-
-		if (t->Status == TCP_STATE_SYN_SENT || t->Status == TCP_STATE_SYN_RCVD ||
-			t->Status == TCP_STATE_ESTAB)
-		{
-			if (CmpIpAddr(&t->LocalIP, local_ip) == 0)
-			{
-				if (CmpIpAddr(&t->RemoteIP, remote_ip) == 0)
-				{
-					if (t->LocalPort == local_port)
-					{
-						if (t->RemotePort == remote_port)
-						{
-							return t;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return NULL;
-}
-
-// Get the TCP table list (Win32)
-#ifdef	OS_WIN32
-LIST *Win32GetTcpTableList()
-{
-	LIST *o;
-
-	// Windows XP SP2 or later
-	o = Win32GetTcpTableListByGetExtendedTcpTable();
-	if (o != NULL)
-	{
-		return o;
-	}
-
-	// Windows XP or later
-	o = Win32GetTcpTableListByAllocateAndGetTcpExTableFromStack();
-	if (o != NULL)
-	{
-		return o;
-	}
-
-	// For legacy Windows
-	return Win32GetTcpTableListByGetTcpTable();
-}
-
-// Get the TCP table list (for Windows XP SP2 or later)
-LIST *Win32GetTcpTableListByGetExtendedTcpTable()
-{
-	UINT need_size;
-	UINT i;
-	MIB_TCPTABLE_OWNER_PID *table;
-	bool ok = false;
-	LIST *o;
-	if (w32net->GetExtendedTcpTable == NULL)
-	{
-		return NULL;
-	}
-
-	for (i = 0;i < 128;i++)
-	{
-		UINT ret;
-		table = MallocFast(sizeof(MIB_TCPTABLE_OWNER_PID));
-		need_size = sizeof(MIB_TCPTABLE_OWNER_PID);
-		ret = w32net->GetExtendedTcpTable(table, &need_size, true, AF_INET, _TCP_TABLE_OWNER_PID_ALL, 0);
-		if (ret == NO_ERROR)
-		{
-			ok = true;
-			break;
-		}
-		else
-		{
-			Free(table);
-			if (ret != ERROR_INSUFFICIENT_BUFFER)
-			{
-				return NULL;
-			}
-		}
-
-		table = MallocFast(need_size);
-
-		ret = w32net->GetExtendedTcpTable(table, &need_size, true, AF_INET, _TCP_TABLE_OWNER_PID_ALL, 0);
-		if (ret == NO_ERROR)
-		{
-			ok = true;
-			break;
-		}
-		else
-		{
-			Free(table);
-
-			if (ret != ERROR_INSUFFICIENT_BUFFER)
-			{
-				return NULL;
-			}
-		}
-	}
-
-	if (ok == false)
-	{
-		return NULL;
-	}
-
-	o = NewListEx(NULL, true);
-
-	for (i = 0;i < table->dwNumEntries;i++)
-	{
-		MIB_TCPROW_OWNER_PID *r = &table->table[i];
-		TCPTABLE *t = ZeroMallocFast(sizeof(TCPTABLE));
-
-		UINTToIP(&t->LocalIP, r->dwLocalAddr);
-		t->LocalPort = Endian16((USHORT)r->dwLocalPort);
-
-		if (r->dwState != TCP_STATE_LISTEN)
-		{
-			UINTToIP(&t->RemoteIP, r->dwRemoteAddr);
-			t->RemotePort = Endian16((USHORT)r->dwRemotePort);
-		}
-
-		t->Status = r->dwState;
-		t->ProcessId = r->dwOwningPid;
-
-		Add(o, t);
-	}
-
-	Free(table);
-
-	return o;
-}
-
-// Get the TCP table list (Windows XP or later)
-LIST *Win32GetTcpTableListByAllocateAndGetTcpExTableFromStack()
-{
-	HANDLE heap;
-	UINT i;
-	MIB_TCPTABLE_OWNER_PID *table;
-	bool ok = false;
-	LIST *o;
-	if (w32net->AllocateAndGetTcpExTableFromStack == NULL)
-	{
-		return NULL;
-	}
-
-	heap = GetProcessHeap();
-
-	if (w32net->AllocateAndGetTcpExTableFromStack(&table, true, heap, HEAP_GROWABLE, AF_INET) != ERROR_SUCCESS)
-	{
-		return NULL;
-	}
-
-	o = NewListEx(NULL, true);
-
-	for (i = 0;i < table->dwNumEntries;i++)
-	{
-		MIB_TCPROW_OWNER_PID *r = &table->table[i];
-		TCPTABLE *t = ZeroMallocFast(sizeof(TCPTABLE));
-
-		UINTToIP(&t->LocalIP, r->dwLocalAddr);
-		t->LocalPort = Endian16((USHORT)r->dwLocalPort);
-
-		if (r->dwState != TCP_STATE_LISTEN)
-		{
-			UINTToIP(&t->RemoteIP, r->dwRemoteAddr);
-			t->RemotePort = Endian16((USHORT)r->dwRemotePort);
-		}
-
-		t->ProcessId = r->dwOwningPid;
-		t->Status = r->dwState;
-
-		Add(o, t);
-	}
-
-	HeapFree(heap, 0, table);
-
-	return o;
-}
-
-// Get the TCP table list (For legacy Windows)
-LIST *Win32GetTcpTableListByGetTcpTable()
-{
-	UINT need_size;
-	UINT i;
-	MIB_TCPTABLE *table;
-	bool ok = false;
-	LIST *o;
-	if (w32net->GetTcpTable == NULL)
-	{
-		return NULL;
-	}
-
-	for (i = 0;i < 128;i++)
-	{
-		UINT ret;
-		table = MallocFast(sizeof(MIB_TCPTABLE));
-		need_size = sizeof(MIB_TCPTABLE);
-		ret = w32net->GetTcpTable(table, &need_size, true);
-		if (ret == NO_ERROR)
-		{
-			ok = true;
-			break;
-		}
-		else
-		{
-			Free(table);
-			if (ret != ERROR_INSUFFICIENT_BUFFER)
-			{
-				return NULL;
-			}
-		}
-
-		table = MallocFast(need_size);
-
-		ret = w32net->GetTcpTable(table, &need_size, true);
-		if (ret == NO_ERROR)
-		{
-			ok = true;
-			break;
-		}
-		else
-		{
-			Free(table);
-
-			if (ret != ERROR_INSUFFICIENT_BUFFER)
-			{
-				return NULL;
-			}
-		}
-	}
-
-	if (ok == false)
-	{
-		return NULL;
-	}
-
-	o = NewListEx(NULL, true);
-
-	for (i = 0;i < table->dwNumEntries;i++)
-	{
-		MIB_TCPROW *r = &table->table[i];
-		TCPTABLE *t = ZeroMallocFast(sizeof(TCPTABLE));
-
-		UINTToIP(&t->LocalIP, r->dwLocalAddr);
-		t->LocalPort = Endian16((USHORT)r->dwLocalPort);
-
-		if (r->dwState != TCP_STATE_LISTEN)
-		{
-			UINTToIP(&t->RemoteIP, r->dwRemoteAddr);
-			t->RemotePort = Endian16((USHORT)r->dwRemotePort);
-		}
-
-		t->Status = r->dwState;
-
-		Add(o, t);
-	}
-
-	Free(table);
-
-	return o;
-}
-
-#endif	// OS_WIN32
-
-// Display the TCP table
-void PrintTcpTableList(LIST *o)
-{
-	UINT i;
-	// Validate arguments
-	if (o == NULL)
-	{
-		Print("o == NULL\n\n");
-		return;
-	}
-
-	Print("--- TCPTABLE: %u Entries ---\n", LIST_NUM(o));
-	for (i = 0;i < LIST_NUM(o);i++)
-	{
-		char tmp1[MAX_PATH], tmp2[MAX_PATH];
-		TCPTABLE *t = LIST_DATA(o, i);
-
-		IPToStr(tmp1, sizeof(tmp1), &t->LocalIP);
-		IPToStr(tmp2, sizeof(tmp2), &t->RemoteIP);
-
-		Print("%s:%u <--> %s:%u  state=%u  pid=%u\n",
-			tmp1, t->LocalPort,
-			tmp2, t->RemotePort,
-			t->Status,
-			t->ProcessId);
-	}
-	Print("------\n\n");
-}
-
-// Comparison of TCP table items
-int CompareTcpTable(void *p1, void *p2)
-{
-	TCPTABLE *t1, *t2;
-	if (p1 == NULL || p2 == NULL)
-	{
-		return 0;
-	}
-	t1 = *(TCPTABLE **)p1;
-	t2 = *(TCPTABLE **)p2;
-	if (t1 == NULL || t2 == NULL)
-	{
-		return 0;
-	}
-
-	return Cmp(t1, t2, sizeof(TCPTABLE));
-}
-
-// Get the TCP table list
-LIST *GetTcpTableList()
-{
-#ifdef	OS_WIN32
-	return Win32GetTcpTableList();
-#else	// OS_WIN32
-	return NULL;
-#endif	// OS_WIN32
-}
-
-// Release the TCP table list
-void FreeTcpTableList(LIST *o)
-{
-	UINT i;
-	// Validate arguments
-	if (o == NULL)
-	{
-		return;
-	}
-
-	for (i = 0;i < LIST_NUM(o);i++)
-	{
-		TCPTABLE *t = LIST_DATA(o, i);
-
-		Free(t);
-	}
-
-	ReleaseList(o);
-}
-
 // Get the number of clients connected from the specified IP address
 UINT GetNumIpClient(IP *ip)
 {
@@ -8168,17 +7572,6 @@ bool IsHostIPAddress32(UINT ip)
 }
 
 // Check whether the specified IP address and subnet mask indicates a network correctly
-bool IsNetworkAddress(IP *ip, IP *mask)
-{
-	if (IsIP4(ip))
-	{
-		return IsNetworkAddress4(ip, mask);
-	}
-	else
-	{
-		return IsNetworkAddress6(ip, mask);
-	}
-}
 bool IsNetworkAddress4(IP *ip, IP *mask)
 {
 	UINT a, b;
@@ -8363,12 +7756,6 @@ bool IsSubnetMask32(UINT ip)
 	return IsSubnetMask4(&p);
 }
 
-// Network release mode
-void SetNetworkReleaseMode()
-{
-	NetworkReleaseMode = true;
-}
-
 #ifdef	OS_UNIX			// Code for UNIX
 
 // Turn on and off the non-blocking mode of the socket
@@ -8409,22 +7796,6 @@ void UnixSetSocketNonBlockingMode(int fd, bool nonblock)
 }
 
 // Do Nothing
-void UnixIpForwardRowToRouteEntry(ROUTE_ENTRY *entry, void *ip_forward_row)
-{
-}
-
-// Do Nothing
-void UnixRouteEntryToIpForwardRow(void *ip_forward_row, ROUTE_ENTRY *entry)
-{
-}
-
-// Do Nothing
-int UnixCompareRouteEntryByMetric(void *p1, void *p2)
-{
-	return 1;
-}
-
-// Do Nothing
 ROUTE_TABLE *UnixGetRouteTable()
 {
 	ROUTE_TABLE *ret = ZeroMalloc(sizeof(ROUTE_TABLE));
@@ -8460,11 +7831,6 @@ char **UnixEnumVLan(char *tag_name)
 	list = ZeroMalloc(sizeof(char *));
 
 	return list;
-}
-
-// Do Nothing
-void UnixRenewDhcp()
-{
 }
 
 // Get the IP address of the default DNS server
@@ -8611,10 +7977,36 @@ void UnixSelect(SOCKSET *set, UINT timeout, CANCEL *c1, CANCEL *c2)
 	if (c1 != NULL)
 	{
 		reads[num_read++] = p1 = c1->pipe_read;
+
+		if (c1->SpecialFlag)
+		{
+			if (c1->pipe_special_read2 != -1 && c1->pipe_special_read2 != 0)
+			{
+				reads[num_read++] = c1->pipe_special_read2;
+			}
+
+			if (c1->pipe_special_read3 != -1 && c1->pipe_special_read3 != 0)
+			{
+				reads[num_read++] = c1->pipe_special_read3;
+			}
+		}
 	}
 	if (c2 != NULL)
 	{
 		reads[num_read++] = p2 = c2->pipe_read;
+
+		if (c2->SpecialFlag)
+		{
+			if (c2->pipe_special_read2 != -1 && c2->pipe_special_read2 != 0)
+			{
+				reads[num_read++] = c2->pipe_special_read2;
+			}
+
+			if (c2->pipe_special_read3 != -1 && c2->pipe_special_read3 != 0)
+			{
+				reads[num_read++] = c2->pipe_special_read3;
+			}
+		}
 	}
 
 	// Call the select
@@ -8694,6 +8086,8 @@ CANCEL *UnixNewCancel()
 	c->SpecialFlag = false;
 
 	UnixNewPipe(&c->pipe_read, &c->pipe_write);
+
+	c->pipe_special_read2 = c->pipe_special_read3 = -1;
 
 	return c;
 }
@@ -8828,12 +8222,23 @@ void UnixSetSockEvent(SOCK_EVENT *event)
 	}
 }
 
+// This is a helper function for select()
+int safe_fd_set(int fd, fd_set* fds, int* max_fd) {
+	FD_SET(fd, fds);
+	if (fd > *max_fd) {
+		*max_fd = fd;
+    }
+	return 0;
+}
+
 // Execute 'select' for the socket
 void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, UINT timeout)
 {
 #ifdef	UNIX_MACOS
-	int kq;
-	struct kevent *kevents;
+	fd_set rfds; //read descriptors
+	fd_set wfds; //write descriptors
+	int max_fd = 0; //maximum descriptor id
+	struct timeval tv; //timeval for timeout
 #else	// UNIX_MACOS
 	struct pollfd *p;
 #endif	// UNIX_MACOS
@@ -8874,8 +8279,8 @@ void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, U
 
 	num = num_read_total + num_write_total;
 #ifdef	UNIX_MACOS
-	kq = kqueue();
-	kevents = ZeroMallocFast(sizeof(struct kevent) * (num + num_write_total));
+	FD_ZERO(&rfds); //zero out descriptor set for read descriptors
+	FD_ZERO(&wfds); //same for write
 #else	// UNIX_MACOS
 	p = ZeroMallocFast(sizeof(struct pollfd) * num);
 #endif	// UNIX_MACOS
@@ -8887,7 +8292,7 @@ void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, U
 		if (reads[i] != INVALID_SOCKET)
 		{
 #ifdef	UNIX_MACOS
-			EV_SET(&kevents[n++], reads[i], EVFILT_READ, EV_ADD, 0, 0, NULL);
+			safe_fd_set(reads[i], &rfds, &max_fd);
 #else	// UNIX_MACOS
 			struct pollfd *pfd = &p[n++];
 			pfd->fd = reads[i];
@@ -8901,8 +8306,7 @@ void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, U
 		if (writes[i] != INVALID_SOCKET)
 		{
 #ifdef	UNIX_MACOS
-			EV_SET(&kevents[n++], reads[i], EVFILT_READ, EV_ADD, 0, 0, NULL);
-			EV_SET(&kevents[n++], reads[i], EVFILT_WRITE, EV_ADD, 0, 0, NULL);
+			safe_fd_set(writes[i], &wfds, &max_fd);
 #else	// UNIX_MACOS
 			struct pollfd *pfd = &p[n++];
 			pfd->fd = writes[i];
@@ -8914,17 +8318,11 @@ void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, U
 	if (num != 0)
 	{
 #ifdef	UNIX_MACOS
-		struct timespec kevent_timeout, *p_kevent_timeout;
-		if (timeout == INFINITE) {
-			p_kevent_timeout = NULL;
-		} else {
-			kevent_timeout.tv_sec = timeout / 1000;
-			kevent_timeout.tv_nsec = (timeout % 1000) * 1000000l;
-			p_kevent_timeout = &kevent_timeout;
-		}
-		kevent(kq, kevents, n, kevents, n, p_kevent_timeout);
+		tv.tv_sec = timeout / 1000;
+		tv.tv_usec = (timeout % 1000) * 1000l;
+		select(max_fd + 1, &rfds, &wfds, NULL, timeout == INFINITE ? NULL : &tv);
 #else	// UNIX_MACOS
-		poll(p, num, timeout == INFINITE ? -1 : (int)timeout);
+		(void)poll(p, num, timeout == INFINITE ? -1 : (int)timeout);
 #endif	// UNIX_MACOS
 	}
 	else
@@ -8932,12 +8330,9 @@ void UnixSelectInner(UINT num_read, UINT *reads, UINT num_write, UINT *writes, U
 		SleepThread(timeout);
 	}
 
-#ifdef	UNIX_MACOS
-	Free(kevents);
-	close(kq);
-#else	// UNIX_MACOS
+#ifndef	UNIX_MACOS
 	Free(p);
-#endif	// UNIX_MACOS
+#endif	// not UNIX_MACOS
 }
 
 // Clean-up of the socket event
@@ -9092,6 +8487,14 @@ void UnixInitAsyncSocket(SOCK *sock)
 	{
 		UnixSetSocketNonBlockingMode(sock->socket, true);
 	}
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+	if (sock->ssl != NULL && sock->ssl->s3 != NULL)
+	{
+		sock->Ssl_Init_Async_SendAlert[0] = sock->ssl->s3->send_alert[0];
+		sock->Ssl_Init_Async_SendAlert[1] = sock->ssl->s3->send_alert[1];
+	}
+#endif
 }
 
 // Initializing the socket library
@@ -9406,52 +8809,6 @@ bool Win32GetAdapterFromGuid(void *a, char *guid)
 	return ret;
 }
 
-// Test
-void Win32NetworkTest()
-{
-	IP_INTERFACE_INFO *info;
-	UINT size;
-	int i;
-	LIST *o;
-
-	size = sizeof(IP_INTERFACE_INFO);
-	info = ZeroMallocFast(size);
-
-	if (w32net->GetInterfaceInfo(info, &size) == ERROR_INSUFFICIENT_BUFFER)
-	{
-		Free(info);
-		info = ZeroMallocFast(size);
-	}
-
-	if (w32net->GetInterfaceInfo(info, &size) != NO_ERROR)
-	{
-		Free(info);
-		return;
-	}
-
-	o = NewListFast(CompareIpAdapterIndexMap);
-
-	for (i = 0;i < info->NumAdapters;i++)
-	{
-		IP_ADAPTER_INDEX_MAP *a = &info->Adapter[i];
-
-		Add(o, a);
-	}
-
-	Sort(o);
-
-	for (i = 0;i < (int)(LIST_NUM(o));i++)
-	{
-		IP_ADAPTER_INDEX_MAP *a = LIST_DATA(o, i);
-
-		DoNothing();
-	}
-
-	ReleaseList(o);
-
-	Free(info);
-}
-
 // Clear the DNS cache on Win32
 void Win32FlushDnsCache()
 {
@@ -9568,27 +8925,6 @@ void Win32ReleaseDhcp9x(UINT if_id, bool wait)
 	ReleaseList(o);
 
 	Free(info);
-}
-
-// Re-obtain an IP address from a DHCP server
-void Win32RenewDhcp()
-{
-	if (OS_IS_WINDOWS_NT(GetOsInfo()->OsType))
-	{
-		Run("ipconfig.exe", "/renew", true, false);
-		if (MsIsVista())
-		{
-			Run("ipconfig.exe", "/renew6", true, false);
-		}
-		else
-		{
-			Run("netsh.exe", "int ipv6 renew", true, false);
-		}
-	}
-	else
-	{
-		Run("ipconfig.exe", "/renew_all", true, false);
-	}
 }
 
 // Enumerate a list of virtual LAN cards that contains the specified string
@@ -10778,37 +10114,6 @@ void FreeWaitThread()
 	WaitThreadList = NULL;
 }
 
-// Check the cipher list name
-bool CheckCipherListName(char *name)
-{
-	UINT i;
-	// Validate arguments
-	if (name == NULL)
-	{
-		return false;
-	}
-
-	for (i = 0;i < cipher_list_token->NumTokens;i++)
-	{
-		if (StrCmpi(cipher_list_token->Token[i], name) == 0)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-// Renewing the IP address of the DHCP server
-void RenewDhcp()
-{
-#ifdef	OS_WIN32
-	Win32RenewDhcp();
-#else
-	UnixRenewDhcp();
-#endif
-}
-
 // Get a domain name for UNIX
 bool UnixGetDomainName(char *name, UINT size)
 {
@@ -10889,25 +10194,21 @@ bool GetDomainName(char *name, UINT size)
 // Get the default DNS server
 bool GetDefaultDns(IP *ip)
 {
-	bool ret = false;
 #ifdef	OS_WIN32
-	ret = Win32GetDefaultDns(ip, NULL, 0);
+	return Win32GetDefaultDns(ip, NULL, 0);
 #else
-	ret = UnixGetDefaultDns(ip);
+	return UnixGetDefaultDns(ip);
 #endif	// OS_WIN32
-	return ret;
 }
 
 // Creating a socket event
 SOCK_EVENT *NewSockEvent()
 {
-	SOCK_EVENT *e = NULL;
 #ifdef	OS_WIN32
-	e = Win32NewSockEvent();
+	return Win32NewSockEvent();
 #else
-	e = UnixNewSockEvent();
+	return UnixNewSockEvent();
 #endif	// OS_WIN32
-	return e;
 }
 
 // Set of the socket event
@@ -11058,10 +10359,6 @@ void Cancel(CANCEL *c)
 }
 
 // Calculate the optimal route from the specified routing table
-ROUTE_ENTRY *GetBestRouteEntryFromRouteTable(ROUTE_TABLE *table, IP *ip)
-{
-	return GetBestRouteEntryFromRouteTableEx(table, ip, 0);
-}
 ROUTE_ENTRY *GetBestRouteEntryFromRouteTableEx(ROUTE_TABLE *table, IP *ip, UINT exclude_if_id)
 {
 	UINT i;
@@ -11380,7 +10677,7 @@ ROUTE_TABLE *GetRouteTable()
 		WriteBuf(buf, e, sizeof(ROUTE_ENTRY));
 	}
 
-	Hash(hash, buf->Buf, buf->Size, false);
+	Md5(hash, buf->Buf, buf->Size);
 
 	FreeBuf(buf);
 
@@ -11410,36 +10707,40 @@ void FreeRouteTable(ROUTE_TABLE *t)
 // UDP receiving
 UINT RecvFrom(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 {
-	SOCKET s;
-	int ret, sz;
 	struct sockaddr_in addr;
+	int ret = 0;
+#ifdef	OS_WIN32
+	int socklen = sizeof(addr);
+#else
+	socklen_t socklen = sizeof(addr);
+#endif
+
 	// Validate arguments
 	if (sock != NULL)
 	{
+		if (sock->IPv6)
+		{
+			return RecvFrom6(sock, src_addr, src_port, data, size);
+		}
+
 		sock->IgnoreRecvErr = false;
 	}
-	if (sock == NULL || src_addr == NULL || src_port == NULL || data == NULL)
+	else
 	{
-		return false;
+		return 0;
 	}
+
+	if (src_addr == NULL || src_port == NULL || data == NULL || size == 0)
+	{
+		return 0;
+	}
+
 	if (sock->Type != SOCK_UDP || sock->socket == INVALID_SOCKET)
 	{
-		return false;
-	}
-	if (size == 0)
-	{
-		return false;
+		return 0;
 	}
 
-	if (sock->IPv6)
-	{
-		return RecvFrom6(sock, src_addr, src_port, data, size);
-	}
-
-	s = sock->socket;
-
-	sz = sizeof(addr);
-	ret = recvfrom(s, data, size, 0, (struct sockaddr *)&addr, (int *)&sz);
+	ret = recvfrom(sock->socket, data, size, 0, (struct sockaddr *)&addr, &socklen);
 	if (ret > 0)
 	{
 		InAddrToIP(src_addr, &addr.sin_addr);
@@ -11447,13 +10748,6 @@ UINT RecvFrom(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		if (sock->IsRawSocket)
 		{
 			*src_port = sock->LocalPort;
-/*
-			{
-				char tmp[MAX_SIZE];
-
-				IPToStr(tmp, sizeof(tmp), &sock->LocalIP);
-				Debug("Raw: %u from %s\n", sock->LocalPort, tmp);
-			}*/
 		}
 
 		Lock(sock->lock);
@@ -11463,17 +10757,13 @@ UINT RecvFrom(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		}
 		Unlock(sock->lock);
 
-		// Debug("UDP RecvFrom: %u\n", ret);
-
 		return (UINT)ret;
 	}
 	else
 	{
-		sock->IgnoreRecvErr = false;
-
 #ifdef	OS_WIN32
 		if (WSAGetLastError() == WSAECONNRESET || WSAGetLastError() == WSAENETRESET || WSAGetLastError() == WSAEMSGSIZE || WSAGetLastError() == WSAENETUNREACH ||
-			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS)
+			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEADDRNOTAVAIL || WSAGetLastError() == WSAEADDRNOTAVAIL)
 		{
 			sock->IgnoreRecvErr = true;
 		}
@@ -11483,10 +10773,9 @@ UINT RecvFrom(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		}
 		else
 		{
-			UINT e = WSAGetLastError();
-//			Debug("RecvFrom Error: %u\n", e);
+			Debug("RecvFrom(): recvfrom() failed with error: %u\n", WSAGetLastError());
 		}
-#else	// OS_WIN32
+#else
 		if (errno == ECONNREFUSED || errno == ECONNRESET || errno == EMSGSIZE || errno == ENOBUFS || errno == ENOMEM || errno == EINTR)
 		{
 			sock->IgnoreRecvErr = true;
@@ -11495,37 +10784,46 @@ UINT RecvFrom(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		{
 			return SOCK_LATER;
 		}
-#endif	// OS_WIN32
+		else
+		{
+			Debug("RecvFrom(): recvfrom() failed with error: %s\n", strerror(errno));
+		}
+#endif
 		return 0;
 	}
 }
 UINT RecvFrom6(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 {
-	SOCKET s;
-	int ret, sz;
 	struct sockaddr_in6 addr;
+	int ret = 0;
+#ifdef	OS_WIN32
+	int socklen = sizeof(addr);
+#else
+	socklen_t socklen = sizeof(addr);
+#endif
+
 	// Validate arguments
 	if (sock != NULL)
 	{
 		sock->IgnoreRecvErr = false;
 	}
-	if (sock == NULL || src_addr == NULL || src_port == NULL || data == NULL)
+	else
 	{
-		return false;
+		return 0;
 	}
+
+	if (src_addr == NULL || src_port == NULL || data == NULL || size == 0)
+	{
+		return 0;
+	}
+
 	if (sock->Type != SOCK_UDP || sock->socket == INVALID_SOCKET)
 	{
-		return false;
-	}
-	if (size == 0)
-	{
-		return false;
+		return 0;
 	}
 
-	s = sock->socket;
 
-	sz = sizeof(addr);
-	ret = recvfrom(s, data, size, 0, (struct sockaddr *)&addr, (int *)&sz);
+	ret = recvfrom(sock->socket, data, size, 0, (struct sockaddr *)&addr, &socklen);
 	if (ret > 0)
 	{
 		InAddrToIP6(src_addr, &addr.sin6_addr);
@@ -11543,17 +10841,13 @@ UINT RecvFrom6(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		}
 		Unlock(sock->lock);
 
-		// Debug("UDP RecvFrom: %u\n", ret);
-
 		return (UINT)ret;
 	}
 	else
 	{
-		sock->IgnoreRecvErr = false;
-
 #ifdef	OS_WIN32
 		if (WSAGetLastError() == WSAECONNRESET || WSAGetLastError() == WSAENETRESET || WSAGetLastError() == WSAEMSGSIZE || WSAGetLastError() == WSAENETUNREACH ||
-			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS)
+			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEADDRNOTAVAIL || WSAGetLastError() == WSAEADDRNOTAVAIL)
 		{
 			sock->IgnoreRecvErr = true;
 		}
@@ -11563,10 +10857,9 @@ UINT RecvFrom6(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		}
 		else
 		{
-			UINT e = WSAGetLastError();
-			//			Debug("RecvFrom Error: %u\n", e);
+			Debug("RecvFrom(): recvfrom() failed with error: %u\n", WSAGetLastError());
 		}
-#else	// OS_WIN32
+#else
 		if (errno == ECONNREFUSED || errno == ECONNRESET || errno == EMSGSIZE || errno == ENOBUFS || errno == ENOMEM || errno == EINTR)
 		{
 			sock->IgnoreRecvErr = true;
@@ -11575,21 +10868,13 @@ UINT RecvFrom6(SOCK *sock, IP *src_addr, UINT *src_port, void *data, UINT size)
 		{
 			return SOCK_LATER;
 		}
-#endif	// OS_WIN32
+		else
+		{
+			Debug("RecvFrom(): recvfrom() failed with error: %s\n", strerror(errno));
+		}
+#endif
 		return 0;
 	}
-}
-
-// Lock the OpenSSL
-void LockOpenSSL()
-{
-	Lock(openssl_lock);
-}
-
-// Unlock the OpenSSL
-void UnlockOpenSSL()
-{
-	Unlock(openssl_lock);
 }
 
 // UDP transmission
@@ -11654,7 +10939,7 @@ UINT SendToEx(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size, 
 
 			sock->UdpBroadcast = true;
 
-			setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char *)&yes, sizeof(yes));
+			(void)setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char *)&yes, sizeof(yes));
 		}
 	}
 
@@ -11665,7 +10950,7 @@ UINT SendToEx(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size, 
 
 #ifdef	OS_WIN32
 		if (WSAGetLastError() == WSAECONNRESET || WSAGetLastError() == WSAENETRESET || WSAGetLastError() == WSAEMSGSIZE || WSAGetLastError() == WSAENETUNREACH ||
-			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEINVAL)
+			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEINVAL || WSAGetLastError() == WSAEADDRNOTAVAIL)
 		{
 			sock->IgnoreSendErr = true;
 		}
@@ -11699,10 +10984,6 @@ UINT SendToEx(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size, 
 	Unlock(sock->lock);
 
 	return ret;
-}
-UINT SendTo6(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size)
-{
-	return SendTo6Ex(sock, dest_addr, dest_port, data, size, false);
 }
 UINT SendTo6Ex(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size, bool broadcast)
 {
@@ -11757,7 +11038,7 @@ UINT SendTo6Ex(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size,
 
 			sock->UdpBroadcast = true;
 
-			setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char *)&yes, sizeof(yes));
+			(void)setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char *)&yes, sizeof(yes));
 		}
 	}
 
@@ -11768,7 +11049,7 @@ UINT SendTo6Ex(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size,
 
 #ifdef	OS_WIN32
 		if (WSAGetLastError() == WSAECONNRESET || WSAGetLastError() == WSAENETRESET || WSAGetLastError() == WSAEMSGSIZE || WSAGetLastError() == WSAENETUNREACH ||
-			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEINVAL)
+			WSAGetLastError() == WSAENOBUFS || WSAGetLastError() == WSAEHOSTUNREACH || WSAGetLastError() == WSAEUSERS || WSAGetLastError() == WSAEINVAL || WSAGetLastError() == WSAEADDRNOTAVAIL)
 		{
 			sock->IgnoreSendErr = true;
 		}
@@ -11803,37 +11084,6 @@ UINT SendTo6Ex(SOCK *sock, IP *dest_addr, UINT dest_port, void *data, UINT size,
 	return ret;
 }
 
-// Disable the UDP checksum
-void DisableUDPChecksum(SOCK *s)
-{
-	bool true_flag = true;
-	// Validate arguments
-	if (s == NULL || s->Type != SOCK_UDP)
-	{
-		return;
-	}
-
-	if (s->socket != INVALID_SOCKET)
-	{
-		if (s->IPv6 == false)
-		{
-#ifdef	UDP_NOCHECKSUM
-			setsockopt(s->socket, IPPROTO_UDP, UDP_NOCHECKSUM, (char *)&true_flag, sizeof(bool));
-#endif	// UDP_NOCHECKSUM
-		}
-	}
-}
-
-// Set the socket to asynchronous mode
-void InitAsyncSocket(SOCK *sock)
-{
-#ifdef	OS_WIN32
-	Win32InitAsyncSocket(sock);
-#else	// OS_WIN32
-	UnixInitAsyncSocket(sock);
-#endif	// OS_WIN32
-}
-
 // Open a UDP port (port number is random, but determine the randomness in the seed)
 SOCK *NewUDPEx2Rand(bool ipv6, IP *ip, void *rand_seed, UINT rand_seed_size, UINT num_retry)
 {
@@ -11858,7 +11108,7 @@ SOCK *NewUDPEx2Rand(bool ipv6, IP *ip, void *rand_seed, UINT rand_seed_size, UIN
 		WriteBuf(buf, rand_seed, rand_seed_size);
 		WriteBufInt(buf, i);
 
-		HashSha1(hash, buf->Buf, buf->Size);
+		Sha1(hash, buf->Buf, buf->Size);
 
 		FreeBuf(buf);
 
@@ -11875,47 +11125,6 @@ SOCK *NewUDPEx2Rand(bool ipv6, IP *ip, void *rand_seed, UINT rand_seed_size, UIN
 	}
 
 	return NewUDPEx2(0, ipv6, ip);
-}
-
-// Generate a random port number (based on the EXE path and machine key)
-UINT NewRandPortByMachineAndExePath(UINT start_port, UINT end_port, UINT additional_int)
-{
-	BUF *b;
-	char machine_name[MAX_SIZE];
-	wchar_t exe_path[MAX_PATH];
-	char *product_id = NULL;
-	UCHAR hash[SHA1_SIZE];
-
-#ifdef	OS_WIN32
-	product_id = MsRegReadStr(REG_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", "ProductId");
-	if (product_id == NULL)
-	{
-		product_id = MsRegReadStr(REG_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion", "ProductId");
-	}
-#endif	// OS_WIN32
-
-	b = NewBuf();
-
-	GetMachineHostName(machine_name, sizeof(machine_name));
-	Trim(machine_name);
-	StrUpper(machine_name);
-
-	GetExeNameW(exe_path, sizeof(exe_path));
-	UniTrim(exe_path);
-	UniStrUpper(exe_path);
-
-	WriteBuf(b, machine_name, StrSize(machine_name));
-	WriteBuf(b, exe_path, UniStrSize(exe_path));
-	WriteBuf(b, product_id, StrSize(product_id));
-	WriteBufInt(b, additional_int);
-
-	HashSha1(hash, b->Buf, b->Size);
-
-	FreeBuf(b);
-
-	Free(product_id);
-
-	return (READ_UINT(hash) % (end_port - start_port)) + start_port;
 }
 
 // Open the UDP port (based on the EXE path and machine key)
@@ -11951,13 +11160,43 @@ SOCK *NewUDPEx2RandMachineAndExePath(bool ipv6, IP *ip, UINT num_retry, UCHAR ra
 	WriteBufChar(b, rand_port_id);
 	//WriteBufInt(b, GetHostIPAddressHash32());
 
-	HashSha1(hash, b->Buf, b->Size);
+	Sha1(hash, b->Buf, b->Size);
 
 	FreeBuf(b);
 
 	Free(product_id);
 
 	return NewUDPEx2Rand(ipv6, ip, hash, sizeof(hash), num_retry);
+}
+
+// Set the DF bit of the socket
+void ClearSockDfBit(SOCK *s)
+{
+#ifdef	IP_PMTUDISC_DONT
+#ifdef	IP_MTU_DISCOVER
+	UINT value = IP_PMTUDISC_DONT;
+	if (s == NULL)
+	{
+		return;
+	}
+
+	(void)setsockopt(s->socket, IPPROTO_IP, IP_MTU_DISCOVER, (char *)&value, sizeof(value));
+#endif	// IP_MTU_DISCOVER
+#endif	// IP_PMTUDISC_DONT
+}
+
+// Set the header-include option
+void SetRawSockHeaderIncludeOption(SOCK *s, bool enable)
+{
+	UINT value = BOOL_TO_INT(enable);
+	if (s == NULL || s->IsRawSocket == false)
+	{
+		return;
+	}
+
+	(void)setsockopt(s->socket, IPPROTO_IP, IP_HDRINCL, (char *)&value, sizeof(value));
+
+	s->RawIP_HeaderIncludeFlag = enable;
 }
 
 // Create and initialize the UDP socket
@@ -12049,13 +11288,13 @@ SOCK *NewUDP4(UINT port, IP *ip)
 		if (port != 0)
 		{
 			bool true_flag = true;
-			setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
+			(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 			if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0)
 			{
 				bool false_flag = false;
-				setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&false_flag, sizeof(bool));
+				(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&false_flag, sizeof(bool));
 #ifdef	SO_EXCLUSIVEADDRUSE
-				setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char *)&true_flag, sizeof(bool));
+				(void)setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char *)&true_flag, sizeof(bool));
 #endif	// SO_EXCLUSIVEADDRUSE
 				if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0)
 				{
@@ -12089,7 +11328,7 @@ SOCK *NewUDP4(UINT port, IP *ip)
 	if (IS_SPECIAL_PORT(port))
 	{
 		bool no = false;
-		setsockopt(sock->socket, IPPROTO_IP, IP_HDRINCL, (char *)&no, sizeof(no));
+		(void)setsockopt(sock->socket, IPPROTO_IP, IP_HDRINCL, (char *)&no, sizeof(no));
 
 		sock->IsRawSocket = true;
 		sock->RawSocketIPProtocol = GET_SPECIAL_PORT(port);
@@ -12146,13 +11385,13 @@ SOCK *NewUDP6(UINT port, IP *ip)
 		if (port != 0)
 		{
 			bool true_flag = true;
-			setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
+			(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 			if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0)
 			{
 				bool false_flag = false;
-				setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&false_flag, sizeof(bool));
+				(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&false_flag, sizeof(bool));
 #ifdef	SO_EXCLUSIVEADDRUSE
-				setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char *)&true_flag, sizeof(bool));
+				(void)setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char *)&true_flag, sizeof(bool));
 #endif	// SO_EXCLUSIVEADDRUSE
 				if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0)
 				{
@@ -12188,9 +11427,9 @@ SOCK *NewUDP6(UINT port, IP *ip)
 	{
 		bool no = false;
 #ifdef	IPV6_HDRINCL
-		setsockopt(sock->socket, IPPROTO_IP, IPV6_HDRINCL, (char *)&no, sizeof(no));
+		(void)setsockopt(sock->socket, IPPROTO_IP, IPV6_HDRINCL, (char *)&no, sizeof(no));
 #endif	// IPV6_HDRINCL
-		setsockopt(sock->socket, IPPROTO_IP, IP_HDRINCL, (char *)&no, sizeof(no));
+		(void)setsockopt(sock->socket, IPPROTO_IP, IP_HDRINCL, (char *)&no, sizeof(no));
 
 		sock->IsRawSocket = true;
 		sock->RawSocketIPProtocol = GET_SPECIAL_PORT(port);
@@ -12270,6 +11509,14 @@ bool RecvAll(SOCK *sock, void *data, UINT size, bool secure)
 		ret = Recv(sock, (UCHAR *)data + recv_size, sz, secure);
 		if (ret == 0)
 		{
+			return false;
+		}
+		if (ret == SOCK_LATER)
+		{
+			// I suppose that this is safe because the RecvAll() function is used only 
+			// if the sock->AsyncMode == true. And the Recv() function may return
+			// SOCK_LATER only if the sock->AsyncMode == false. Therefore the call of 
+			// Recv() function in the RecvAll() function never returns SOCK_LATER.
 			return false;
 		}
 		recv_size += ret;
@@ -12364,6 +11611,7 @@ void SetWantToUseCipher(SOCK *sock, char *name)
 	{
 		Free(sock->WaitToUseCipher);
 	}
+
 	sock->WaitToUseCipher = CopyStr(name);
 }
 
@@ -12372,7 +11620,10 @@ void AddChainSslCertOnDirectory(struct ssl_ctx_st *ctx)
 {
 	wchar_t dirname[MAX_SIZE];
 	wchar_t exedir[MAX_SIZE];
+	wchar_t txtname[MAX_SIZE];
 	DIRLIST *dir;
+	LIST *o;
+	UINT i;
 
 	// Validate arguments
 	if (ctx == NULL)
@@ -12380,18 +11631,25 @@ void AddChainSslCertOnDirectory(struct ssl_ctx_st *ctx)
 		return;
 	}
 
+	o = NewListFast(NULL);
+
 	GetExeDirW(exedir, sizeof(exedir));
 
 	CombinePathW(dirname, sizeof(dirname), exedir, L"chain_certs");
 
 	MakeDirExW(dirname);
 
+	CombinePathW(txtname, sizeof(txtname), dirname, L"Readme_Chain_Certs.txt");
+
+	if (IsFileExistsW(txtname) == false)
+	{
+		FileCopyW(L"|chain_certs.txt", txtname);
+	}
+
 	dir = EnumDirW(dirname);
 
 	if (dir != NULL)
 	{
-		UINT i;
-
 		for (i = 0;i < dir->NumFiles;i++)
 		{
 			DIRENT *e = dir->File[i];
@@ -12407,7 +11665,28 @@ void AddChainSslCertOnDirectory(struct ssl_ctx_st *ctx)
 
 				if (x != NULL)
 				{
-					AddChainSslCert(ctx, x);
+					UINT j;
+					bool exists = false;
+					UCHAR hash[SHA1_SIZE];
+
+					GetXDigest(x, hash, true);
+
+					for (j = 0;j < LIST_NUM(o);j++)
+					{
+						UCHAR *hash2 = LIST_DATA(o, j);
+
+						if (Cmp(hash, hash2, SHA1_SIZE) == 0)
+						{
+							exists = true;
+						}
+					}
+
+					if (exists == false)
+					{
+						AddChainSslCert(ctx, x);
+
+						Add(o, Clone(hash, SHA1_SIZE));
+					}
 
 					FreeX(x);
 				}
@@ -12416,6 +11695,15 @@ void AddChainSslCertOnDirectory(struct ssl_ctx_st *ctx)
 
 		FreeDir(dir);
 	}
+
+	for (i = 0;i < LIST_NUM(o);i++)
+	{
+		UCHAR *hash = LIST_DATA(o, i);
+
+		Free(hash);
+	}
+
+	ReleaseList(o);
 }
 
 // Add the chain certificate
@@ -12447,9 +11735,9 @@ bool AddChainSslCert(struct ssl_ctx_st *ctx, X *x)
 // Start a TCP-SSL communication
 bool StartSSL(SOCK *sock, X *x, K *priv)
 {
-	return StartSSLEx(sock, x, priv, false, 0, NULL);
+	return StartSSLEx(sock, x, priv, 0, NULL);
 }
-bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, char *sni_hostname)
+bool StartSSLEx(SOCK *sock, X *x, K *priv, UINT ssl_timeout, char *sni_hostname)
 {
 	X509 *x509;
 	EVP_PKEY *key;
@@ -12503,13 +11791,38 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 		return true;
 	}
 
-	ssl_ctx = NewSSLCtx();
+	ssl_ctx = NewSSLCtx(sock->ServerMode);
 
 	Lock(openssl_lock);
 	{
 		if (sock->ServerMode)
 		{
-			SSL_CTX_set_ssl_version(ssl_ctx, SSLv23_method());
+			SSL_CTX_set_ssl_version(ssl_ctx, SSLv23_server_method());
+
+#ifdef	SSL_OP_NO_SSLv3
+			SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv3);
+#endif	// SSL_OP_NO_SSLv3
+
+#ifdef	SSL_OP_NO_TLSv1
+			if (sock->SslAcceptSettings.Tls_Disable1_0)
+			{
+				SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_TLSv1);
+			}
+#endif	// SSL_OP_NO_TLSv1
+
+#ifdef	SSL_OP_NO_TLSv1_1
+			if (sock->SslAcceptSettings.Tls_Disable1_1)
+			{
+				SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_TLSv1_1);
+			}
+#endif	// SSL_OP_NO_TLSv1_1
+
+#ifdef	SSL_OP_NO_TLSv1_2
+			if (sock->SslAcceptSettings.Tls_Disable1_2)
+			{
+				SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_TLSv1_2);
+			}
+#endif	// SSL_OP_NO_TLSv1_2
 
 			Unlock(openssl_lock);
 			AddChainSslCertOnDirectory(ssl_ctx);
@@ -12517,20 +11830,18 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 		}
 		else
 		{
-			if (client_tls == false)
-			{
-				SSL_CTX_set_ssl_version(ssl_ctx, SSLv3_method());
-			}
-			else
-			{
-				SSL_CTX_set_ssl_version(ssl_ctx, TLSv1_client_method());
-			}
+			SSL_CTX_set_ssl_version(ssl_ctx, SSLv23_client_method());
+
+#ifdef	SSL_OP_NO_SSLv3
+			SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv3);
+#endif	// SSL_OP_NO_SSLv3
 		}
+
 		sock->ssl = SSL_new(ssl_ctx);
 		SSL_set_fd(sock->ssl, (int)sock->socket);
 
 #ifdef	SSL_CTRL_SET_TLSEXT_HOSTNAME
-		if (sock->ServerMode == false && client_tls)
+		if (sock->ServerMode == false)
 		{
 			if (IsEmptyStr(sni_hostname) == false)
 			{
@@ -12539,6 +11850,7 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 			}
 		}
 #endif	// SSL_CTRL_SET_TLSEXT_HOSTNAME
+
 	}
 	Unlock(openssl_lock);
 
@@ -12565,7 +11877,8 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 		// Set the cipher algorithm name to want to use
 		Lock(openssl_lock);
 		{
-			SSL_set_cipher_list(sock->ssl, sock->WaitToUseCipher);
+			if (SSL_set_cipher_list(sock->ssl, sock->WaitToUseCipher) == 0)
+				SSL_set_cipher_list(sock->ssl, DEFAULT_CIPHER_LIST);
 		}
 		Unlock(openssl_lock);
 	}
@@ -12659,6 +11972,8 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 	Lock(openssl_lock);
 	{
 		x509 = SSL_get_peer_certificate(sock->ssl);
+
+		sock->SslVersion = SSL_get_version(sock->ssl);
 	}
 	Unlock(openssl_lock);
 
@@ -12712,8 +12027,119 @@ bool StartSSLEx(SOCK *sock, X *x, K *priv, bool client_tls, UINT ssl_timeout, ch
 
 	Unlock(sock->ssl_lock);
 
+#ifdef	ENABLE_SSL_LOGGING
+	if (sock->ServerMode)
+	{
+		SockEnableSslLogging(sock);
+	}
+#endif	// ENABLE_SSL_LOGGING
+
 	return true;
 }
+
+
+
+#ifdef	ENABLE_SSL_LOGGING
+
+// Enable SSL logging
+void SockEnableSslLogging(SOCK *s)
+{
+	char dirname[MAX_PATH];
+	char tmp[MAX_PATH];
+	char dtstr[MAX_PATH];
+	char fn1[MAX_PATH], fn2[MAX_PATH];
+	// Validate arguments
+	if (s == NULL)
+	{
+		return;
+	}
+
+	if (s->IsSslLoggingEnabled)
+	{
+		return;
+	}
+
+	s->IsSslLoggingEnabled = true;
+
+	GetDateTimeStrMilli64ForFileName(dtstr, sizeof(dtstr), LocalTime64());
+	Format(tmp, sizeof(tmp), "%s__%r_%u__%r_%u", dtstr,
+		&s->LocalIP, s->LocalPort, &s->RemoteIP, s->RemotePort);
+
+	CombinePath(dirname, sizeof(dirname), SSL_LOGGING_DIRNAME, tmp);
+
+	MakeDirEx(dirname);
+
+	CombinePath(fn1, sizeof(fn1), dirname, "send.c");
+	CombinePath(fn2, sizeof(fn2), dirname, "recv.c");
+
+	s->SslLogging_Send = FileCreate(fn1);
+	s->SslLogging_Recv = FileCreate(fn2);
+
+	s->SslLogging_Lock = NewLock();
+}
+
+// Close SSL logging
+void SockCloseSslLogging(SOCK *s)
+{
+	// Validate arguments
+	if (s == NULL)
+	{
+		return;
+	}
+
+	if (s->IsSslLoggingEnabled == false)
+	{
+		return;
+	}
+
+	s->IsSslLoggingEnabled = false;
+
+	FileClose(s->SslLogging_Recv);
+	s->SslLogging_Recv = NULL;
+
+	FileClose(s->SslLogging_Send);
+	s->SslLogging_Send = NULL;
+
+	DeleteLock(s->SslLogging_Lock);
+	s->SslLogging_Lock = NULL;
+}
+
+// Write SSL log
+void SockWriteSslLog(SOCK *s, void *send_data, UINT send_size, void *recv_data, UINT recv_size)
+{
+	// Validate arguments
+	if (s == NULL)
+	{
+		return;
+	}
+
+	if (s->IsSslLoggingEnabled == false)
+	{
+		return;
+	}
+
+	Lock(s->SslLogging_Lock);
+	{
+		if (s->SslLogging_Send != NULL)
+		{
+			if (send_size >= 1 && send_data != NULL)
+			{
+				FileWrite(s->SslLogging_Send, send_data, send_size);
+			}
+		}
+
+		if (s->SslLogging_Recv != NULL)
+		{
+			if (recv_size >= 1 && recv_data != NULL)
+			{
+				FileWrite(s->SslLogging_Recv, recv_data, recv_size);
+			}
+		}
+	}
+	Unlock(s->SslLogging_Lock);
+}
+
+#endif	// ENABLE_SSL_LOGGING
 
 // Set the flag to indicate that the socket doesn't require reading
 void SetNoNeedToRead(SOCK *sock)
@@ -12730,15 +12156,13 @@ void SetNoNeedToRead(SOCK *sock)
 // TCP-SSL receive
 UINT SecureRecv(SOCK *sock, void *data, UINT size)
 {
-	SOCKET s;
-	int ret, e = 0;
+	int ret, e = SSL_ERROR_NONE;
 	SSL *ssl;
 
 #ifdef UNIX_SOLARIS
 	SOCKET_TIMEOUT_PARAM *ttparam;
 #endif //UNIX_SOLARIS
 
-	s = sock->socket;
 	ssl = sock->ssl;
 
 	if (sock->AsyncMode)
@@ -12771,6 +12195,19 @@ UINT SecureRecv(SOCK *sock, void *data, UINT size)
 			e = SSL_get_error(ssl, ret);
 			if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE || e == SSL_ERROR_SSL)
 			{
+				if (e == SSL_ERROR_SSL
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+					&&
+					sock->ssl->s3->send_alert[0] == SSL3_AL_FATAL &&
+					sock->ssl->s3->send_alert[0] != sock->Ssl_Init_Async_SendAlert[0] &&
+					sock->ssl->s3->send_alert[1] != sock->Ssl_Init_Async_SendAlert[1]
+#endif
+					)
+				{
+					Debug("%s %u SSL Fatal Error on ASYNC socket !!!\n", __FILE__, __LINE__);
+					Disconnect(sock);
+					return 0;
+				}
 				// Packet has not arrived yet, that is not to be read
 				return SOCK_LATER;
 			}
@@ -12821,11 +12258,20 @@ UINT SecureRecv(SOCK *sock, void *data, UINT size)
 
 	}
 	Unlock(sock->ssl_lock);
+
+#ifdef	ENABLE_SSL_LOGGING
+	if (ret > 0)
+	{
+		SockWriteSslLog(sock, NULL, 0, data, ret);
+	}
+#endif	// ENABLE_SSL_LOGGING
+
 	if (ret > 0)
 	{
 		// Successful reception
 		sock->RecvSize += (UINT64)ret;
 		sock->RecvNum++;
+
 		return (UINT)ret;
 	}
 	if (ret == 0)
@@ -12839,6 +12285,20 @@ UINT SecureRecv(SOCK *sock, void *data, UINT size)
 	{
 		if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE || e == SSL_ERROR_SSL)
 		{
+			if (e == SSL_ERROR_SSL
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+				&&
+				sock->ssl->s3->send_alert[0] == SSL3_AL_FATAL &&
+				sock->ssl->s3->send_alert[0] != sock->Ssl_Init_Async_SendAlert[0] &&
+				sock->ssl->s3->send_alert[1] != sock->Ssl_Init_Async_SendAlert[1]
+#endif
+				)
+			{
+				Debug("%s %u SSL Fatal Error on ASYNC socket !!!\n", __FILE__, __LINE__);
+				Disconnect(sock);
+				return 0;
+			}
+
 			// Packet has not yet arrived
 			return SOCK_LATER;
 		}
@@ -12851,10 +12311,8 @@ UINT SecureRecv(SOCK *sock, void *data, UINT size)
 // TCP-SSL transmission
 UINT SecureSend(SOCK *sock, void *data, UINT size)
 {
-	SOCKET s;
-	int ret, e;
+	int ret, e = SSL_ERROR_NONE;
 	SSL *ssl;
-	s = sock->socket;
 	ssl = sock->ssl;
 
 	if (sock->AsyncMode)
@@ -12880,6 +12338,13 @@ UINT SecureSend(SOCK *sock, void *data, UINT size)
 		}
 	}
 	Unlock(sock->ssl_lock);
+
+#ifdef	ENABLE_SSL_LOGGING
+	if (ret > 0)
+	{
+		SockWriteSslLog(sock, data, ret, NULL, 0);
+	}
+#endif	// ENABLE_SSL_LOGGING
 
 	if (ret > 0)
 	{
@@ -13194,16 +12659,26 @@ void SetTimeout(SOCK *sock, UINT timeout)
 			tv_timeout.tv_sec = timeout / 1000; // miliseconds to seconds
 			tv_timeout.tv_usec = (timeout % 1000) * 1000; // miliseconds to microseconds
 
-			setsockopt(sock->socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv_timeout, sizeof(tv_timeout));
-			setsockopt(sock->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv_timeout, sizeof(tv_timeout));
+			(void)setsockopt(sock->socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv_timeout, sizeof(tv_timeout));
+			(void)setsockopt(sock->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv_timeout, sizeof(tv_timeout));
 		}
 #endif // UNIX_SOLARIS
 #endif // OS_UNIX
 	}
 }
 
+// Disable GetHostName call by accepting new TCP connection
+void DisableGetHostNameWhenAcceptInit()
+{
+	disable_gethostname_by_accept = true;
+}
+
 // Initialize the connection acceptance
 void AcceptInit(SOCK *s)
+{
+	AcceptInitEx(s, false);
+}
+void AcceptInitEx(SOCK *s, bool no_lookup_hostname)
 {
 	char tmp[MAX_SIZE];
 	// Validate arguments
@@ -13213,8 +12688,16 @@ void AcceptInit(SOCK *s)
 	}
 
 	Zero(tmp, sizeof(tmp));
-	if (GetHostName(tmp, sizeof(tmp), &s->RemoteIP) == false ||
-		IsEmptyStr(tmp))
+
+	if (disable_gethostname_by_accept == false && no_lookup_hostname == false)
+	{
+		if (GetHostName(tmp, sizeof(tmp), &s->RemoteIP) == false ||
+			IsEmptyStr(tmp))
+		{
+			IPToStr(tmp, sizeof(tmp), &s->RemoteIP);
+		}
+	}
+	else
 	{
 		IPToStr(tmp, sizeof(tmp), &s->RemoteIP);
 	}
@@ -13321,7 +12804,7 @@ SOCK *Accept(SOCK *sock)
 	ret->SecureMode = false;
 
 	// Configuring the TCP options
-	setsockopt(ret->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(ret->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
 
 	// Initialization of the time-out value
 	SetTimeout(ret, TIMEOUT_INFINITE);
@@ -13432,7 +12915,7 @@ SOCK *Accept6(SOCK *sock)
 	ret->SecureMode = false;
 
 	// Configuring the TCP options
-	setsockopt(ret->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(ret->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
 
 	// Initialize the time-out value
 	SetTimeout(ret, TIMEOUT_INFINITE);
@@ -13461,10 +12944,6 @@ SOCK *Accept6(SOCK *sock)
 }
 
 // Standby for TCP (IPv6)
-SOCK *Listen6(UINT port)
-{
-	return ListenEx6(port, false);
-}
 SOCK *ListenEx6(UINT port, bool local_only)
 {
 	return ListenEx62(port, local_only, false);
@@ -13476,7 +12955,6 @@ SOCK *ListenEx62(UINT port, bool local_only, bool enable_ca)
 	struct sockaddr_in6 addr;
 	struct in6_addr in;
 	bool true_flag = true;
-	bool disable_conditional_accept = false;
 	IP localhost;
 	UINT backlog = SOMAXCONN;
 	// Validate arguments
@@ -13517,15 +12995,13 @@ SOCK *ListenEx62(UINT port, bool local_only, bool enable_ca)
 
 #ifdef	OS_UNIX
 	// It is necessary to set the IPv6 Only flag on a UNIX system
-	setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &true_flag, sizeof(true_flag));
+	(void)setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &true_flag, sizeof(true_flag));
 #endif	// OS_UNIX
-
-	//SetSocketSendRecvBufferSize(s, SOCKET_BUFFER_SIZE);
 
 #ifdef	OS_UNIX
 	// This only have enabled for UNIX system since there is a bug
 	// in the implementation of REUSEADDR in Windows OS
-	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 #endif	// OS_UNIX
 
 	if (bind(s, (struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) != 0)
@@ -13578,9 +13054,9 @@ SOCK *Listen(UINT port)
 }
 SOCK *ListenEx(UINT port, bool local_only)
 {
-	return ListenEx2(port, local_only, false);
+	return ListenEx2(port, local_only, false, NULL);
 }
-SOCK *ListenEx2(UINT port, bool local_only, bool enable_ca)
+SOCK *ListenEx2(UINT port, bool local_only, bool enable_ca, IP *listen_ip)
 {
 	SOCKET s;
 	SOCK *sock;
@@ -13609,7 +13085,14 @@ SOCK *ListenEx2(UINT port, bool local_only, bool enable_ca)
 	SetIP(&localhost, 127, 0, 0, 1);
 
 	addr.sin_port = htons((UINT)port);
-	*((UINT *)&addr.sin_addr) = htonl(INADDR_ANY);
+	if (listen_ip == NULL)
+	{
+		*((UINT *)&addr.sin_addr) = htonl(INADDR_ANY);
+	}
+	else
+	{
+		IPToInAddr(&addr.sin_addr, listen_ip);
+	}
 	addr.sin_family = AF_INET;
 
 	if (local_only)
@@ -13626,12 +13109,10 @@ SOCK *ListenEx2(UINT port, bool local_only, bool enable_ca)
 		return NULL;
 	}
 
-	//SetSocketSendRecvBufferSize(s, SOCKET_BUFFER_SIZE);
-
 #ifdef	OS_UNIX
 	// This only have enabled for UNIX system since there is a bug
 	// in the implementation of REUSEADDR in Windows OS
-	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 #endif	// OS_UNIX
 
 	if (bind(s, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) != 0)
@@ -13689,6 +13170,10 @@ void Disconnect(SOCK *sock)
 	}
 
 	sock->Disconnecting = true;
+
+#ifdef	ENABLE_SSL_LOGGING
+	SockCloseSslLogging(sock);
+#endif	// ENABLE_SSL_LOGGING
 
 #ifdef	OS_UNIX
 	UnixFreeAsyncSocket(sock);
@@ -13750,9 +13235,9 @@ void Disconnect(SOCK *sock)
 		{
 			// Forced disconnection flag
 			#ifdef	SO_DONTLINGER
-				setsockopt(sock->socket, SOL_SOCKET, SO_DONTLINGER, (char *)&true_flag, sizeof(bool));
+				(void)setsockopt(sock->socket, SOL_SOCKET, SO_DONTLINGER, (char *)&true_flag, sizeof(bool));
 			#else	// SO_DONTLINGER
-				setsockopt(sock->socket, SOL_SOCKET, SO_LINGER, (char *)&false_flag, sizeof(bool));
+				(void)setsockopt(sock->socket, SOL_SOCKET, SO_LINGER, (char *)&false_flag, sizeof(bool));
 			#endif	// SO_DONTLINGER
 //			setsockopt(sock->socket, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 		}
@@ -13819,24 +13304,6 @@ void Disconnect(SOCK *sock)
 						sock->ssl_ctx = NULL;
 					}
 					sock->Connected = false;
-					// Release the certificate
-					if (sock->RemoteX != NULL)
-					{
-						FreeX(sock->RemoteX);
-						sock->RemoteX = NULL;
-					}
-					if (sock->LocalX != NULL)
-					{
-						FreeX(sock->LocalX);
-						sock->LocalX = NULL;
-					}
-
-					// Cipher algorithm name
-					if (sock->CipherName != NULL)
-					{
-						Free(sock->CipherName);
-						sock->CipherName = NULL;
-					}
 					sock->SecureMode = false;
 				}
 			}
@@ -13989,39 +13456,6 @@ typedef struct TCP_PORT_CHECK
 	UINT port;
 	bool ok;
 } TCP_PORT_CHECK;
-
-// The thread to check the TCP port
-void CheckTCPPortThread(THREAD *thread, void *param)
-{
-	TCP_PORT_CHECK *c;
-	SOCK *s;
-	// Validate arguments
-	if (thread == NULL || param == NULL)
-	{
-		return;
-	}
-
-	c = (TCP_PORT_CHECK *)param;
-	AddRef(c->ref);
-	NoticeThreadInit(thread);
-
-	AddWaitThread(thread);
-
-	s = Connect(c->hostname, c->port);
-	if (s != NULL)
-	{
-		c->ok = true;
-		Disconnect(s);
-		ReleaseSock(s);
-	}
-
-	if (Release(c->ref) == 0)
-	{
-		Free(c);
-	}
-
-	DelWaitThread(thread);
-}
 
 // Check whether the TCP port can be connected
 bool CheckTCPPortEx(char *hostname, UINT port, UINT timeout)
@@ -14234,7 +13668,7 @@ void SetSockTos(SOCK *s, int tos)
 	}
 
 #ifdef	IP_TOS
-	setsockopt(s->socket, IPPROTO_IP, IP_TOS, (char *)&tos, sizeof(int));
+	(void)setsockopt(s->socket, IPPROTO_IP, IP_TOS, (char *)&tos, sizeof(int));
 #endif	// IP_TOS
 
 	s->CurrentTos = tos;
@@ -14313,6 +13747,9 @@ bool DetectIsServerSoftEtherVPN(SOCK *s)
 	AddHttpValue(h, NewHttpValue("User-Agent", DEFAULT_USER_AGENT));
 	AddHttpValue(h, NewHttpValue("Pragma", "no-cache"));
 	AddHttpValue(h, NewHttpValue("Cache-Control", "no-cache"));
+
+
+
 	send_str = HttpHeaderToStr(h);
 	FreeHttpHeader(h);
 
@@ -14414,11 +13851,14 @@ void ConnectThreadForTcp(THREAD *thread, void *param)
 
 	// Connecting process
 	IPToStr(hostname, sizeof(hostname), &p->Ip);
-	sock = ConnectEx3(hostname, p->Port, p->Timeout, p->CancelFlag, NULL, NULL, false, false, true);
+	sock = ConnectEx3(hostname, p->Port, p->Timeout, p->CancelFlag, NULL, NULL, false, true);
 
 	if (sock != NULL && p->Tcp_TryStartSsl)
 	{
 		bool ssl_ret = false;
+
+		p->Tcp_InNegotiation = true;
+
 		// Attempt the SSL negotiation to take this opportunity
 		Lock(p->CancelLock);
 		{
@@ -14436,7 +13876,7 @@ void ConnectThreadForTcp(THREAD *thread, void *param)
 		Unlock(p->CancelLock);
 
 		// Start the SSL communication
-		ssl_ret = StartSSLEx(sock, NULL, NULL, p->Tcp_SslNoTls, 0, p->Hostname);
+		ssl_ret = StartSSLEx(sock, NULL, NULL, 0, p->Hostname);
 
 		if (ssl_ret)
 		{
@@ -14455,9 +13895,8 @@ void ConnectThreadForTcp(THREAD *thread, void *param)
 		{
 			ReleaseSock(p->CancelDisconnectSock);
 			p->CancelDisconnectSock = NULL;
-LABEL_CANCEL:
-			DoNothing();
 		}
+LABEL_CANCEL:
 		Unlock(p->CancelLock);
 
 		if (ssl_ret == false)
@@ -14476,6 +13915,7 @@ LABEL_CANCEL:
 	p->Ok = (p->Result_Tcp_Sock == NULL ? false : true);
 	p->FinishedTick = Tick64();
 	p->Finished = true;
+	p->Tcp_InNegotiation = false;
 
 	Set(p->FinishEvent);
 }
@@ -14549,9 +13989,13 @@ SOCK *ConnectEx(char *hostname, UINT port, UINT timeout)
 }
 SOCK *ConnectEx2(char *hostname, UINT port, UINT timeout, bool *cancel_flag)
 {
-	return ConnectEx3(hostname, port, timeout, cancel_flag, NULL, NULL, false, false, false);
+	return ConnectEx3(hostname, port, timeout, cancel_flag, NULL, NULL, false, true);
 }
-SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, char *nat_t_svc_name, UINT *nat_t_error_code, bool try_start_ssl, bool ssl_no_tls, bool no_get_hostname)
+SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, char *nat_t_svc_name, UINT *nat_t_error_code, bool try_start_ssl, bool no_get_hostname)
+{
+	return ConnectEx4(hostname, port, timeout, cancel_flag, nat_t_svc_name, nat_t_error_code, try_start_ssl, no_get_hostname, NULL);
+}
+SOCK *ConnectEx4(char *hostname, UINT port, UINT timeout, bool *cancel_flag, char *nat_t_svc_name, UINT *nat_t_error_code, bool try_start_ssl, bool no_get_hostname, IP *ret_ip)
 {
 	SOCK *sock;
 	SOCKET s;
@@ -14569,6 +14013,7 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 	char hint_str[MAX_SIZE];
 	bool force_use_natt = false;
 	UINT dummy_int = 0;
+	IP dummy_ret_ip;
 	// Validate arguments
 	if (hostname == NULL || port == 0 || port >= 65536 || IsEmptyStr(hostname))
 	{
@@ -14585,6 +14030,12 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 	if (nat_t_error_code == NULL)
 	{
 		nat_t_error_code = &dummy_int;
+	}
+
+	Zero(&dummy_ret_ip, sizeof(IP));
+	if (ret_ip == NULL)
+	{
+		ret_ip = &dummy_ret_ip;
 	}
 
 	Zero(hint_str, sizeof(hint_str));
@@ -14634,10 +14085,27 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 	Zero(&ip4, sizeof(ip4));
 	Zero(&ip6, sizeof(ip6));
 
-	// Forward resolution
-	if (GetIP46Ex(&ip4, &ip6, hostname_original, 0, cancel_flag) == false)
+	if (IsZeroIp(ret_ip) == false)
 	{
-		return NULL;
+		// Skip name resolution
+		if (IsIP6(ret_ip))
+		{
+			Copy(&ip6, ret_ip, sizeof(IP));
+		}
+		else
+		{
+			Copy(&ip4, ret_ip, sizeof(IP));
+		}
+
+		//Debug("Using cached IP address: %s = %r\n", hostname_original, ret_ip);
+	}
+	else
+	{
+		// Forward resolution
+		if (GetIP46Ex(&ip4, &ip6, hostname_original, 0, cancel_flag) == false)
+		{
+			return NULL;
+		}
 	}
 
 	if (IsZeroIp(&ip4) == false && IsIPLocalHostOrMySelf(&ip4))
@@ -14660,6 +14128,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 			if (s != INVALID_SOCKET)
 			{
 				Copy(&current_ip, &ip4, sizeof(IP));
+
+				Copy(ret_ip, &ip4, sizeof(IP));
 			}
 		}
 		else if (force_use_natt)
@@ -14672,6 +14142,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 			{
 				StrCpy(nat_t_sock->UnderlayProtocol, sizeof(nat_t_sock->UnderlayProtocol), SOCK_UNDERLAY_NAT_T);
 			}
+
+			Copy(ret_ip, &ip4, sizeof(IP));
 
 			return nat_t_sock;
 		}
@@ -14702,7 +14174,6 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 			p1.CancelFlag = &cancel_flag2;
 			p1.FinishEvent = finish_event;
 			p1.Tcp_TryStartSsl = try_start_ssl;
-			p1.Tcp_SslNoTls = ssl_no_tls;
 			p1.CancelLock = NewLock();
 
 			// p2: NAT-T
@@ -14805,7 +14276,11 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 					if (now >= tcp_giveup_tick)
 					{
 						// Result of the TCP is uncertain, but give up
-						break;
+						if (p1.Finished || p1.Tcp_InNegotiation == false)
+						{
+							// Break only when TCP SSL negotiation is not being processed
+							break;
+						}
 					}
 				}
 
@@ -14877,6 +14352,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 					p1.Result_Tcp_Sock->RemoteHostname = CopyStr(hostname);
 				}
 
+				Copy(ret_ip, &ip4, sizeof(IP));
+
 				return p1.Result_Tcp_Sock;
 			}
 			else if (p2.Ok)
@@ -14891,6 +14368,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 				StrCpy(p2.Result_Nat_T_Sock->UnderlayProtocol, sizeof(p2.Result_Nat_T_Sock->UnderlayProtocol),
 					SOCK_UNDERLAY_NAT_T);
 
+				Copy(ret_ip, &ip4, sizeof(IP));
+
 				return p2.Result_Nat_T_Sock;
 			}
 			else if (p4.Ok)
@@ -14903,6 +14382,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 				StrCpy(p4.Result_Nat_T_Sock->UnderlayProtocol, sizeof(p4.Result_Nat_T_Sock->UnderlayProtocol),
 					SOCK_UNDERLAY_DNS);
 
+				Copy(ret_ip, &ip4, sizeof(IP));
+
 				return p4.Result_Nat_T_Sock;
 			}
 			else if (p3.Ok)
@@ -14910,6 +14391,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 				// Use this if over ICMP success
 				StrCpy(p3.Result_Nat_T_Sock->UnderlayProtocol, sizeof(p3.Result_Nat_T_Sock->UnderlayProtocol),
 					SOCK_UNDERLAY_ICMP);
+
+				Copy(ret_ip, &ip4, sizeof(IP));
 
 				return p3.Result_Nat_T_Sock;
 			}
@@ -14953,6 +14436,8 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 				Copy(&current_ip, &ip6, sizeof(IP));
 
 				is_ipv6 = true;
+
+				Copy(ret_ip, &ip6, sizeof(IP));
 			}
 		}
 	}
@@ -14987,14 +14472,14 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 	Zero(&ling, sizeof(ling));
 	// Forced disconnection flag
 #ifdef	SO_DONTLINGER
-	setsockopt(sock->socket, SOL_SOCKET, SO_DONTLINGER, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(sock->socket, SOL_SOCKET, SO_DONTLINGER, (char *)&true_flag, sizeof(bool));
 #else	// SO_DONTLINGER
-	setsockopt(sock->socket, SOL_SOCKET, SO_LINGER, (char *)&false_flag, sizeof(bool));
+	(void)setsockopt(sock->socket, SOL_SOCKET, SO_LINGER, (char *)&false_flag, sizeof(bool));
 #endif	// SO_DONTLINGER
 //	setsockopt(sock->socket, SOL_SOCKET, SO_REUSEADDR, (char *)&true_flag, sizeof(bool));
 
 	// Configuring TCP options
-	setsockopt(sock->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
+	(void)setsockopt(sock->socket, IPPROTO_TCP, TCP_NODELAY, (char *)&true_flag, sizeof(bool));
 
 	// Initialization of the time-out value
 	SetTimeout(sock, TIMEOUT_INFINITE);
@@ -15018,39 +14503,6 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 	sock->IPv6 = is_ipv6;
 
 	return sock;
-}
-
-// Maximize the I/O buffer size of the socket
-void SetSocketSendRecvBufferSize(SOCKET s, UINT size)
-{
-	int value = (int)size;
-	// Validate arguments
-	if (s == INVALID_SOCKET)
-	{
-		return;
-	}
-
-	setsockopt(s, SOL_SOCKET, SO_RCVBUF, (char *)&value, sizeof(int));
-	setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *)&value, sizeof(int));
-}
-
-// Get the buffer size of the socket
-UINT GetSocketBufferSize(SOCKET s, bool send)
-{
-	int value = 0;
-	int len = sizeof(int);
-	// Validate arguments
-	if (s == INVALID_SOCKET)
-	{
-		return 0;
-	}
-
-	if (getsockopt(s, SOL_SOCKET, (send ? SO_SNDBUF : SO_RCVBUF), (char *)&value, &len) != 0)
-	{
-		return 0;
-	}
-
-	return value;
 }
 
 // Setting the buffer size of the socket
@@ -15412,6 +14864,25 @@ void CleanupSock(SOCK *s)
 	}
 #endif	// OS_WIN32
 
+	// Release the certificate
+	if (s->RemoteX != NULL)
+	{
+		FreeX(s->RemoteX);
+		s->RemoteX = NULL;
+	}
+	if (s->LocalX != NULL)
+	{
+		FreeX(s->LocalX);
+		s->LocalX = NULL;
+	}
+
+	// Cipher algorithm name
+	if (s->CipherName != NULL)
+	{
+		Free(s->CipherName);
+		s->CipherName = NULL;
+	}
+
 	Free(s->WaitToUseCipher);
 	DeleteLock(s->lock);
 	DeleteLock(s->ssl_lock);
@@ -15502,23 +14973,6 @@ void GetMachineHostName(char *name, UINT size)
 	}
 
 	ConvertSafeFileName(name, size, tmp);
-}
-
-// Get the IP address of this computer
-void GetMachineIp(IP *ip)
-{
-	char tmp[MAX_SIZE];
-	// Validate arguments
-	if (ip == NULL)
-	{
-		return;
-	}
-
-	Zero(ip, sizeof(IP));
-	SetIP(ip, 127, 0, 0, 1);
-
-	GetMachineName(tmp, sizeof(tmp));
-	GetIP(ip, tmp);
 }
 
 // Get the computer name from 'hosts'
@@ -15627,7 +15081,7 @@ void GetMachineNameEx(char *name, UINT size, bool no_load_hosts)
 			{
 				if (GetMachineNameFromHosts(tmp2, sizeof(tmp2)))
 				{
-					StrCpy(name, sizeof(name), tmp2);
+					StrCpy(name, size, tmp2);
 				}
 			}
 		}
@@ -15992,77 +15446,7 @@ UINT SetIP32(UCHAR a1, UCHAR a2, UCHAR a3, UCHAR a4)
 	return IPToUINT(&ip);
 }
 
-// Get either of v4 and v6 results with a DNS forward lookup (The IPv4 precedes in the case of both results)
-bool GetIP46Any4(IP *ip, char *hostname)
-{
-	IP ip4, ip6;
-	bool b = false;
-	// Validate arguments
-	if (ip == NULL || hostname == NULL)
-	{
-		return false;
-	}
-
-	if (GetIP46(&ip4, &ip6, hostname) == false)
-	{
-		return false;
-	}
-
-	if (IsZeroIp(&ip6) == false)
-	{
-		Copy(ip, &ip6, sizeof(IP));
-
-		b = true;
-	}
-
-	if (IsZeroIp(&ip4) == false)
-	{
-		Copy(ip, &ip4, sizeof(IP));
-
-		b = true;
-	}
-
-	return b;
-}
-
-// Get either of v4 and v6 results with a DNS forward lookup (The IPv6 precedes in the case of both)
-bool GetIP46Any6(IP *ip, char *hostname)
-{
-	IP ip4, ip6;
-	bool b = false;
-	// Validate arguments
-	if (ip == NULL || hostname == NULL)
-	{
-		return false;
-	}
-
-	if (GetIP46(&ip4, &ip6, hostname) == false)
-	{
-		return false;
-	}
-
-	if (IsZeroIp(&ip4) == false)
-	{
-		Copy(ip, &ip4, sizeof(IP));
-
-		b = true;
-	}
-
-	if (IsZeroIp(&ip6) == false)
-	{
-		Copy(ip, &ip6, sizeof(IP));
-
-		b = true;
-	}
-
-	return b;
-}
-
 // Obtain in both v4 and v6 results with a DNS forward lookup
-bool GetIP46(IP *ip4, IP *ip6, char *hostname)
-{
-	return GetIP46Ex(ip4, ip6, hostname, 0, NULL);
-}
 bool GetIP46Ex(IP *ip4, IP *ip6, char *hostname, UINT timeout, bool *cancel)
 {
 	IP a, b;
@@ -16183,6 +15567,8 @@ void GetIP4Ex6ExThread(THREAD *t, void *param)
 	ReleaseGetIPThreadParam(p);
 
 	DelWaitThread(t);
+
+	Dec(getip_thread_counter);
 }
 
 // Perform a forward DNS query (with timeout)
@@ -16197,9 +15583,13 @@ bool GetIP4Ex6Ex2(IP *ip, char *hostname_arg, UINT timeout, bool ipv6, bool *can
 	bool ret = false;
 	UINT64 start_tick = 0;
 	UINT64 end_tick = 0;
+	UINT64 spent_time = 0;
+	UINT64 now;
+	UINT n;
 	bool use_dns_proxy = false;
 	char hostname[260];
 	UINT i;
+	bool timed_out;
 	// Validate arguments
 	if (ip == NULL || hostname_arg == NULL)
 	{
@@ -16270,6 +15660,89 @@ bool GetIP4Ex6Ex2(IP *ip, char *hostname_arg, UINT timeout, bool ipv6, bool *can
 	}
 
 
+	// check the quota
+	start_tick = Tick64();
+	end_tick = start_tick + (UINT64)timeout;
+
+	n = 0;
+
+	timed_out = false;
+
+	while (true)
+	{
+		UINT64 now = Tick64();
+		UINT64 remain;
+		UINT remain32;
+
+		if (GetGetIpThreadMaxNum() > GetCurrentGetIpThreadNum())
+		{
+			// below the quota
+			break;
+		}
+
+		if (now >= end_tick)
+		{
+			// timeouted
+			timed_out = true;
+			break;
+		}
+
+		if (cancel != NULL && (*cancel))
+		{
+			// cancelled
+			timed_out = true;
+			break;
+		}
+
+		remain = end_tick - now;
+		remain32 = MIN((UINT)remain, 100);
+
+		SleepThread(remain32);
+		n++;
+	}
+
+	now = Tick64();
+	spent_time = now - start_tick;
+
+	if (n == 0)
+	{
+		spent_time = 0;
+	}
+
+	if ((UINT)spent_time >= timeout)
+	{
+		timed_out = true;
+	}
+
+	if (timed_out)
+	{
+		IP ip2;
+
+		// timed out, cancelled
+		if (QueryDnsCache(&ip2, hostname))
+		{
+			ret = true;
+
+			Copy(ip, &ip2, sizeof(IP));
+		}
+
+		Debug("GetIP4Ex6Ex2: Worker thread quota exceeded: max=%u current=%u\n",
+			GetGetIpThreadMaxNum(), GetCurrentGetIpThreadNum());
+
+		return ret;
+	}
+
+	// Increment the counter
+	Inc(getip_thread_counter);
+
+	if (spent_time != 0)
+	{
+		Debug("GetIP4Ex6Ex2: Waited for %u msecs to create a worker thread.\n",
+			spent_time);
+	}
+
+	timeout -= (UINT)spent_time;
+
 	p = ZeroMalloc(sizeof(GETIP_THREAD_PARAM));
 	p->Ref = NewRef();
 	StrCpy(p->HostName, sizeof(p->HostName), hostname);
@@ -16326,6 +15799,7 @@ bool GetIP4Ex6Ex2(IP *ip, char *hostname_arg, UINT timeout, bool ipv6, bool *can
 	{
 		IP ip2;
 
+#if	0
 		if (only_direct_dns == false)
 		{
 			if (ipv6)
@@ -16354,6 +15828,7 @@ bool GetIP4Ex6Ex2(IP *ip, char *hostname_arg, UINT timeout, bool ipv6, bool *can
 				}
 			}
 		}
+#endif
 
 		if (QueryDnsCache(&ip2, hostname))
 		{
@@ -16555,20 +16030,6 @@ void IPToUniStr32(wchar_t *str, UINT size, UINT ip)
 	StrToUni(str, size, tmp);
 }
 
-// Convert the IP to a string (128bit byte array)
-void IPToStr128(char *str, UINT size, UCHAR *ip_bytes)
-{
-	IP ip_st;
-	// Validate arguments
-	if (str == NULL)
-	{
-		return;
-	}
-
-	SetIP6(&ip_st, ip_bytes);
-	IPToStr(str, size, &ip_st);
-}
-
 // Convert the IP to a string (32bit UINT)
 void IPToStr32(char *str, UINT size, UINT ip)
 {
@@ -16709,17 +16170,6 @@ UINT StrToIP32(char *str)
 
 	return IPToUINT(&ip);
 }
-bool UniStrToIP(IP *ip, wchar_t *str)
-{
-	char *tmp;
-	bool ret;
-
-	tmp = CopyUniToStr(str);
-	ret = StrToIP(ip, tmp);
-	Free(tmp);
-
-	return ret;
-}
 UINT UniStrToIP32(wchar_t *str)
 {
 	UINT ret;
@@ -16763,7 +16213,7 @@ void IPToInAddr6(struct in6_addr *addr, IP *ip)
 		return;
 	}
 
-	Zero(addr, sizeof(struct in_addr));
+	Zero(addr, sizeof(struct in6_addr));
 
 	if (IsIP6(ip))
 	{
@@ -16963,14 +16413,40 @@ void UnlockDnsCache()
 	UnlockList(DnsCache);
 }
 
+// DH temp key callback
+DH *TmpDhCallback(SSL *ssl, int is_export, int keylength)
+{
+	DH *ret = NULL;
+
+	if (dh_param != NULL)
+	{
+		ret = dh_param->dh;
+	}
+
+	return ret;
+}
+
 // Create the SSL_CTX
-struct ssl_ctx_st *NewSSLCtx()
+struct ssl_ctx_st *NewSSLCtx(bool server_mode)
 {
 	struct ssl_ctx_st *ctx = SSL_CTX_new(SSLv23_method());
 
 #ifdef	SSL_OP_NO_TICKET
 	SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
 #endif	// SSL_OP_NO_TICKET
+
+#ifdef	SSL_OP_CIPHER_SERVER_PREFERENCE
+	if (server_mode)
+	{
+		SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
+	}
+#endif	// SSL_OP_CIPHER_SERVER_PREFERENCE
+
+	SSL_CTX_set_tmp_dh_callback(ctx, TmpDhCallback);
+
+#ifdef	SSL_CTX_set_ecdh_auto
+	SSL_CTX_set_ecdh_auto(ctx, 1);
+#endif	// SSL_CTX_set_ecdh_auto
 
 	return ctx;
 }
@@ -16987,9 +16463,32 @@ void FreeSSLCtx(struct ssl_ctx_st *ctx)
 	SSL_CTX_free(ctx);
 }
 
+// The number of get ip threads
+void SetGetIpThreadMaxNum(UINT num)
+{
+	max_getip_thread = num;
+}
+UINT GetGetIpThreadMaxNum()
+{
+	UINT ret = max_getip_thread;
+
+	if (ret == 0)
+	{
+		ret = 0x7FFFFFFF;
+	}
+
+	return ret;
+}
+UINT GetCurrentGetIpThreadNum()
+{
+	return Count(getip_thread_counter);
+}
+
 // Initialize the network communication module
 void InitNetwork()
 {
+	disable_gethostname_by_accept = false;
+
 
 	InitDynList();
 
@@ -16998,6 +16497,8 @@ void InitNetwork()
 	host_ip_address_list_cache_last = 0;
 
 	num_tcp_connections = NewCounter();
+
+	getip_thread_counter = NewCounter();
 
 	// Initialization of client list
 	InitIpClientList();
@@ -17039,8 +16540,9 @@ void InitNetwork()
 
 	disable_cache = false;
 
-
 	Zero(rand_port_numbers, sizeof(rand_port_numbers));
+
+	SetGetIpThreadMaxNum(DEFAULT_GETIP_THREAD_MAX_NUM);
 }
 
 // Enable the network name cache
@@ -17296,6 +16798,45 @@ void FreePrivateIPFile()
 	g_use_privateip_file = false;
 }
 
+// Check whether the specified IP address is in the same network to this computer
+bool IsIPAddressInSameLocalNetwork(IP *a)
+{
+	bool ret = false;
+	LIST *o;
+	UINT i;
+	// Validate arguments
+	if (a == NULL)
+	{
+		return false;
+	}
+
+	o = GetHostIPAddressList();
+
+	if (o != NULL)
+	{
+		for (i = 0;i < LIST_NUM(o);i++)
+		{
+			IP *p = LIST_DATA(o, i);
+
+			if (IsIP4(p))
+			{
+				if (IsZeroIp(p) == false && p->addr[0] != 127)
+				{
+					if (IsInSameNetwork4Standard(p, a))
+					{
+						ret = true;
+						break;
+					}
+				}
+			}
+		}
+
+		FreeHostIPAddressList(o);
+	}
+
+	return ret;
+}
+
 // Guess the IPv4, IPv6 global address from the IP address list of the current interface
 void GetCurrentGlobalIPGuess(IP *ip, bool ipv6)
 {
@@ -17379,7 +16920,7 @@ void SetCurrentGlobalIP(IP *ip, bool ipv6)
 		return;
 	}
 
-	if (IsZeroIp(ip));
+	if (IsZeroIp(ip))
 	{
 		return;
 	}
@@ -17403,6 +16944,12 @@ void SetCurrentGlobalIP(IP *ip, bool ipv6)
 // Release of the network communication module
 void FreeNetwork()
 {
+
+	if (dh_param != NULL)
+	{
+		DhFree(dh_param);
+		dh_param = NULL;
+	}
 
 	// Release of thread-related
 	FreeWaitThread();
@@ -17470,46 +17017,9 @@ void FreeNetwork()
 
 	FreeDynList();
 
-}
+	DeleteCounter(getip_thread_counter);
+	getip_thread_counter = NULL;
 
-// Add a socket to socket list
-void AddSockList(SOCKLIST *sl, SOCK *s)
-{
-	// Validate arguments
-	if (sl == NULL || s == NULL)
-	{
-		return;
-	}
-
-	LockList(sl->SockList);
-	{
-		if (IsInList(sl->SockList, s) == false)
-		{
-			AddRef(s->ref);
-
-			Insert(sl->SockList, s);
-		}
-	}
-	UnlockList(sl->SockList);
-}
-
-// Remove the socket from socket list
-void DelSockList(SOCKLIST *sl, SOCK *s)
-{
-	// Validate arguments
-	if (sl == NULL || s == NULL)
-	{
-		return;
-	}
-
-	LockList(sl->SockList);
-	{
-		if (Delete(sl->SockList, s))
-		{
-			ReleaseSock(s);
-		}
-	}
-	UnlockList(sl->SockList);
 }
 
 // Stop all the sockets in the list and delete it
@@ -17650,20 +17160,6 @@ bool ParseIpAndSubnetMask46(char *src, IP *ip, IP *mask)
 	{
 		return IsSubnetMask6(mask);
 	}
-}
-bool ParseIpAndSubnetMask6(char *src, IP *ip, IP *mask)
-{
-	if (ParseIpAndSubnetMask46(src, ip, mask) == false)
-	{
-		return false;
-	}
-
-	if (IsIP6(ip) == false)
-	{
-		return false;
-	}
-
-	return true;
 }
 bool ParseIpAndSubnetMask4(char *src, UINT *ip, UINT *mask)
 {
@@ -17850,59 +17346,6 @@ bool IsIpStr6(char *str)
 	return true;
 }
 
-// Check whether the IP address specification is correct
-bool IsIpStr46(char *str)
-{
-	if (IsIpStr4(str) || IsIpStr6(str))
-	{
-		return true;
-	}
-
-	return false;
-}
-
-
-// Convert the string to an IPv4 mask
-bool StrToMask4(IP *mask, char *str)
-{
-	// Validate arguments
-	if (mask == NULL || str == NULL)
-	{
-		return false;
-	}
-
-	if (str[0] == '/')
-	{
-		str++;
-	}
-
-	if (IsNum(str))
-	{
-		UINT n = ToInt(str);
-
-		if (n <= 32)
-		{
-			IntToSubnetMask4(mask, n);
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	}
-	else
-	{
-		if (StrToIP(mask, str) == false)
-		{
-			return false;
-		}
-		else
-		{
-			return IsIP4(mask);
-		}
-	}
-}
-
 // Convert the string to an IPv6 mask
 bool StrToMask6(IP *mask, char *str)
 {
@@ -17959,20 +17402,6 @@ bool StrToMask6Addr(IPV6_ADDR *mask, char *str)
 
 	return true;
 }
-
-// Convert the string to an IPv4 / IPv6 mask
-bool StrToMask46(IP *mask, char *str, bool ipv6)
-{
-	if (ipv6)
-	{
-		return StrToMask6(mask, str);
-	}
-	else
-	{
-		return StrToMask4(mask, str);
-	}
-}
-
 
 // Convert the IPv4 / IPv6 mask to a string
 void MaskToStr(char *str, UINT size, IP *mask)
@@ -18634,6 +18063,46 @@ int CmpIpAddressList(void *p1, void *p2)
 	return r;
 }
 
+// Get the IP address list hash of the host
+UINT64 GetHostIPAddressListHash()
+{
+	UINT i;
+	LIST *o;
+	BUF *buf = NewBuf();
+	UCHAR hash[SHA1_SIZE];
+	UINT64 ret = 0;
+
+	o = GetHostIPAddressList();
+
+	if (o != NULL)
+	{
+		for (i = 0;i < LIST_NUM(o);i++)
+		{
+			IP *ip = LIST_DATA(o, i);
+			char tmp[128];
+
+			Zero(tmp, sizeof(tmp));
+			IPToStr(tmp, sizeof(tmp), ip);
+
+			WriteBufStr(buf, tmp);
+		}
+
+		FreeHostIPAddressList(o);
+	}
+
+	WriteBufStr(buf, "test");
+
+	Sha1(hash, buf->Buf, buf->Size);
+
+	FreeBuf(buf);
+
+	Copy(&ret, hash, sizeof(UINT64));
+
+	ret = Endian64(ret);
+
+	return ret;
+}
+
 // Get the IP address list of the host (using cache)
 LIST *GetHostIPAddressList()
 {
@@ -19030,37 +18499,6 @@ void FreeQueryIpThread(QUERYIPTHREAD *t)
 	Free(t);
 }
 
-// Get a public port list which is known by UDP listener
-void UdpListenerGetPublicPortList(UDPLISTENER *u, char *dst, UINT size)
-{
-	UINT k;
-	// Validate arguments
-	ClearStr(dst, size);
-	if (u == NULL || dst == NULL)
-	{
-		return;
-	}
-
-	LockList(u->PortList);
-	{
-		for (k = 0;k < LIST_NUM(u->SockList);k++)
-		{
-			UDPLISTENER_SOCK *us = LIST_DATA(u->SockList, k);
-
-			if (us->PublicPort != 0)
-			{
-				char tmp[64];
-				ToStr(tmp, us->PublicPort);
-				StrCat(dst, size, tmp);
-				StrCat(dst, size, " ");
-			}
-		}
-	}
-	UnlockList(u->PortList);
-
-	Trim(dst);
-}
-
 // UDP listener thread
 void UdpListenerThread(THREAD *thread, void *param)
 {
@@ -19093,7 +18531,9 @@ void UdpListenerThread(THREAD *thread, void *param)
 		UINT interval;
 		bool stage_changed = false;
 		IP nat_t_ip;
+
 		Zero(&nat_t_ip, sizeof(nat_t_ip));
+
 
 		if (u->LastCheckTick == 0 || (now >= (u->LastCheckTick + UDPLISTENER_CHECK_INTERVAL)))
 		{
@@ -19119,6 +18559,11 @@ void UdpListenerThread(THREAD *thread, void *param)
 				for (i = 0;i < LIST_NUM(iplist);i++)
 				{
 					IP *ip = LIST_DATA(iplist, i);
+
+					if (CmpIpAddr(ip, &u->ListenIP) != 0)
+					{
+						continue;
+					}
 
 					WriteBuf(ip_list_buf_new, ip, sizeof(IP));
 
@@ -19267,13 +18712,10 @@ LABEL_RESTART:
 			if (u->GetNatTIpThread == NULL)
 			{
 				char natt_hostname[MAX_SIZE];
-
 				RUDPGetRegisterHostNameByIP(natt_hostname, sizeof(natt_hostname), NULL);
-
 				u->GetNatTIpThread = NewQueryIpThread(natt_hostname, QUERYIPTHREAD_INTERVAL_LAST_OK, QUERYIPTHREAD_INTERVAL_LAST_NG);
+				GetQueryIpThreadResult(u->GetNatTIpThread, &nat_t_ip);
 			}
-
-			GetQueryIpThreadResult(u->GetNatTIpThread, &nat_t_ip);
 		}
 
 		// Receive the data that is arriving at the socket
@@ -19285,16 +18727,20 @@ LABEL_RESTART:
 			{
 				UINT num_ignore_errors = 0;
 
-				if (u->PollMyIpAndPort && IsZeroIP(&nat_t_ip) == false && IsIP4(&us->IpAddress))
+				if (u->PollMyIpAndPort && IsIP4(&us->IpAddress))
 				{
 					if (us->NextMyIpAndPortPollTick == 0 || us->NextMyIpAndPortPollTick <= now)
 					{
-						UCHAR c = 'A';
-
 						// Examine the self IP address and the self port number by using NAT-T server
 						us->NextMyIpAndPortPollTick = now + (UINT64)GenRandInterval(UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MIN, UDP_NAT_T_NAT_STATUS_CHECK_INTERVAL_MAX);
 
-						SendTo(us->Sock, &nat_t_ip, UDP_NAT_T_PORT, &c, 1);
+						if (IsZeroIP(&nat_t_ip) == false
+							)
+						{
+							UCHAR c = 'A';
+
+							SendTo(us->Sock, &nat_t_ip, UDP_NAT_T_PORT, &c, 1);
+						}
 					}
 				}
 
@@ -19611,25 +19057,9 @@ void UdpListenerSendPackets(UDPLISTENER *u, LIST *packet_list)
 		SetSockEvent(u->Event);
 	}
 }
-void UdpListenerSendPacket(UDPLISTENER *u, UDPPACKET *packet)
-{
-	LIST *o;
-	// Validate arguments
-	if (u == NULL || packet == NULL)
-	{
-		return;
-	}
-
-	o = NewListFast(NULL);
-	Add(o, packet);
-
-	UdpListenerSendPackets(u, o);
-
-	ReleaseList(o);
-}
 
 // Creating a UDP listener
-UDPLISTENER *NewUdpListener(UDPLISTENER_RECV_PROC *recv_proc, void *param)
+UDPLISTENER *NewUdpListener(UDPLISTENER_RECV_PROC *recv_proc, void *param, IP *listen_ip)
 {
 	UDPLISTENER *u;
 	// Validate arguments
@@ -19644,6 +19074,11 @@ UDPLISTENER *NewUdpListener(UDPLISTENER_RECV_PROC *recv_proc, void *param)
 
 	u->PortList = NewList(NULL);
 	u->Event = NewSockEvent();
+
+	if (listen_ip)
+	{
+		Copy(&u->ListenIP, listen_ip, sizeof(IP));
+	}
 
 	u->RecvProc = recv_proc;
 	u->SendPacketList = NewList(NULL);
@@ -19706,37 +19141,7 @@ void AddPortToUdpListener(UDPLISTENER *u, UINT port)
 	SetSockEvent(u->Event);
 }
 
-// Get the port list
-UINT GetUdpListenerPortList(UDPLISTENER *u, UINT **port_list)
-{
-	UINT num_ports;
-	// Validate arguments
-	if (u == NULL || port_list == NULL)
-	{
-		return 0;
-	}
-
-	LockList(u->PortList);
-	{
-		UINT *ports;
-		UINT i;
-		
-		num_ports = LIST_NUM(u->PortList);
-		ports = ZeroMalloc(sizeof(UINT) * num_ports);
-
-		for (i = 0;i < num_ports;i++)
-		{
-			ports[i] = *((UINT *)(LIST_DATA(u->PortList, i)));
-		}
-
-		*port_list = ports;
-	}
-	UnlockList(u->PortList);
-
-	return num_ports;
-}
-
-// Dekete all the UDP ports
+// Delete all the UDP ports
 void DeleteAllPortFromUdpListener(UDPLISTENER *u)
 {
 	// Validate arguments
@@ -20711,18 +20116,22 @@ void CreateDummyValue(PACK *p)
 	Free(buf);
 }
 
-// Client send a PACK to the server
+// Client sends a PACK to the server
 bool HttpClientSend(SOCK *s, PACK *p)
 {
 	BUF *b;
 	bool ret;
 	HTTP_HEADER *h;
 	char date_str[MAX_SIZE];
+	char ip_str[MAX_SIZE];
+
 	// Validate arguments
 	if (s == NULL || p == NULL)
 	{
 		return false;
 	}
+
+	IPToStr(ip_str, sizeof(ip_str), &s->RemoteIP);
 
 	CreateDummyValue(p);
 
@@ -20736,6 +20145,7 @@ bool HttpClientSend(SOCK *s, PACK *p)
 
 	GetHttpDateStr(date_str, sizeof(date_str), SystemTime64());
 	AddHttpValue(h, NewHttpValue("Date", date_str));
+	AddHttpValue(h, NewHttpValue("Host", ip_str));
 	AddHttpValue(h, NewHttpValue("Keep-Alive", HTTP_KEEP_ALIVE));
 	AddHttpValue(h, NewHttpValue("Connection", "Keep-Alive"));
 	AddHttpValue(h, NewHttpValue("Content-Type", HTTP_CONTENT_TYPE2));
@@ -20920,65 +20330,6 @@ bool HttpSendNotFound(SOCK *s, char *target)
 	return ret;
 }
 
-// Sending a 500 Server Error
-bool HttpSendServerError(SOCK *s, char *target)
-{
-	HTTP_HEADER *h;
-	char date_str[MAX_SIZE];
-	char *str;
-	UINT str_size;
-	char port_str[MAX_SIZE];
-	bool ret;
-	char host[MAX_SIZE];
-	UINT port;
-	// Validate arguments
-	if (s == NULL || target == NULL)
-	{
-		return false;
-	}
-
-	// Get the host name
-	//GetMachineName(host, MAX_SIZE);
-	Zero(host, sizeof(host));
-	IPToStr(host, sizeof(host), &s->LocalIP);
-	// Get the port number
-	port = s->LocalPort;
-
-	// Creating a header
-	GetHttpDateStr(date_str, sizeof(date_str), SystemTime64());
-
-	h = NewHttpHeader("HTTP/1.1", "500", "Server Error");
-
-	AddHttpValue(h, NewHttpValue("Date", date_str));
-	AddHttpValue(h, NewHttpValue("Keep-Alive", HTTP_KEEP_ALIVE));
-	AddHttpValue(h, NewHttpValue("Connection", "Keep-Alive"));
-	AddHttpValue(h, NewHttpValue("Content-Type", HTTP_CONTENT_TYPE));
-
-	// Creating a Data
-	str_size = sizeof(http_500_str) * 2 + StrLen(target) + StrLen(host);
-	str = Malloc(str_size);
-	StrCpy(str, str_size, http_500_str);
-
-	// TARGET
-	ReplaceUnsafeCharInTarget(target);
-	ReplaceStri(str, str_size, str, "$TARGET$", target);
-
-	// HOST
-	ReplaceStri(str, str_size, str, "$HOST$", host);
-
-	// PORT
-	ToStr(port_str, port);
-	ReplaceStri(str, str_size, str, "$PORT$", port_str);
-
-	// Transmission
-	ret = PostHttp(s, h, str, StrLen(str));
-
-	FreeHttpHeader(h);
-	Free(str);
-
-	return ret;
-}
-
 // Sending a 403 Forbidden error
 bool HttpSendForbidden(SOCK *s, char *target, char *server_id)
 {
@@ -21097,7 +20448,7 @@ bool PostHttp(SOCK *s, HTTP_HEADER *header, void *post_data, UINT post_size)
 		return false;
 	}
 
-	// Check whether the Content-Lentgh exists?
+	// Check whether the Content-Length exists?
 	if (GetHttpValue(header, "Content-Length") == NULL)
 	{
 		char tmp[MAX_SIZE];
@@ -21568,7 +20919,7 @@ PACK *RecvPackWithHash(SOCK *s)
 		return false;
 	}
 
-	HashSha1(hash1, data, sz);
+	Sha1(hash1, data, sz);
 	if (RecvAll(s, hash2, sizeof(hash2), s->SecureMode) == false)
 	{
 		Free(data);
@@ -21629,32 +20980,12 @@ bool SendPackWithHash(SOCK *s, PACK *p)
 
 	SendAdd(s, &sz, sizeof(UINT));
 	SendAdd(s, b->Buf, b->Size);
-	HashSha1(hash, b->Buf, b->Size);
+	Sha1(hash, b->Buf, b->Size);
 	SendAdd(s, hash, sizeof(hash));
 
 	FreeBuf(b);
 
 	return SendNow(s, s->SecureMode);
-}
-
-// Get SNI name from the data that has arrived to the TCP connection before accepting an SSL connection
-bool GetSniNameFromPreSslConnection(SOCK *s, char *sni, UINT sni_size)
-{
-	UCHAR tmp[1500];
-	UINT size;
-	// Validate arguments
-	if (s == NULL || sni == NULL)
-	{
-		return false;
-	}
-
-	size = Peek(s, tmp, sizeof(tmp));
-	if (size == 0)
-	{
-		return false;
-	}
-
-	return GetSniNameFromSslPacket(tmp, size, sni, sni_size);
 }
 
 // Get SNI name from the SSL packet
@@ -21667,7 +20998,14 @@ bool GetSniNameFromSslPacket(UCHAR *packet_buf, UINT packet_size, char *sni, UIN
 	USHORT handshake_length;
 
 	// Validate arguments
-	if (packet_buf == NULL || packet_size == 0)
+	if (packet_buf == NULL || packet_size <= 11)
+	{
+		return false;
+	}
+
+	if (!(packet_buf[0] == 0x16 && packet_buf[1] >= 0x03 &&
+		packet_buf[5] == 0x01 && packet_buf[6] == 0x00 &&
+		packet_buf[9] >= 0x03))
 	{
 		return false;
 	}
@@ -21681,7 +21019,7 @@ bool GetSniNameFromSslPacket(UCHAR *packet_buf, UINT packet_size, char *sni, UIN
 		version = Endian16(version);
 		handshake_length = Endian16(handshake_length);
 
-		if (version >= 0x0301)
+		if (content_type == 0x16 && version >= 0x0301)
 		{
 			UCHAR *handshake_data = Malloc(handshake_length);
 
@@ -21798,9 +21136,12 @@ bool GetSniNameFromSslPacket(UCHAR *packet_buf, UINT packet_size, char *sni, UIN
 
 																							if (ReadBuf(dbuf, name_buf, name_len) == name_len)
 																							{
-																								ret = true;
+																								if (StrLen(name_buf) >= 1)
+																								{
+																									ret = true;
 
-																								StrCpy(sni, sni_size, name_buf);
+																									StrCpy(sni, sni_size, name_buf);
+																								}
 																							}
 
 																							Free(name_buf);
@@ -21854,6 +21195,12 @@ bool GetSniNameFromSslPacket(UCHAR *packet_buf, UINT packet_size, char *sni, UIN
 	return ret;
 }
 
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/
+void SetDhParam(DH_CTX *dh)
+ {
+	if (dh_param)
+	{
+ 		DhFree(dh_param);
+ 	}
+
+ 	dh_param = dh;
+ }

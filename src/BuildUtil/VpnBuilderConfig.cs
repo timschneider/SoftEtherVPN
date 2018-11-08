@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Build Utility
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -123,7 +138,7 @@ namespace BuildUtil
 	// Build settings
 	public static class BuildConfig
 	{
-		public static readonly int NumMultipleCompileTasks = 4;
+		public static readonly int NumMultipleCompileTasks = 1;
 	}
 
 	// Software List
@@ -135,100 +150,100 @@ namespace BuildUtil
 		// ========== Windows ==========
 		// Server and Bridge
 		public static readonly BuildSoftware vpnserver_win32_x86x64_ja =
-			new BuildSoftwareWin32(Software.vpnserver_vpnbridge, 0, 0, "", CpuList.intel, OSList.Windows);
+			new BuildSoftwareWin32(Software.vpnserver_vpnbridge, 0, 0, 0, "", CpuList.intel, OSList.Windows);
 
 		// Client
 		public static readonly BuildSoftware vpnclient_win32_x86x64_ja =
-			new BuildSoftwareWin32(Software.vpnclient, 0, 0, "", CpuList.intel, OSList.Windows);
+			new BuildSoftwareWin32(Software.vpnclient, 0, 0, 0, "", CpuList.intel, OSList.Windows);
 
 		// ========== Linux ==========
 		// Server
 		public static readonly BuildSoftware vpnserver_linux_x86_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x86, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x86, OSList.Linux,
 				"linux-x86-32bit", true, "linux-x86-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_x64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x64, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x64, OSList.Linux,
 				"linux-x86-64bit", true, "linux-x86-64bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_arm_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.arm, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.arm, OSList.Linux,
 				"linux-arm-32bit", false, "linux-arm-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_armeabi_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.armeabi, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.armeabi, OSList.Linux,
 				"linux-armeabi-32bit", false, "linux-armeabi-32bit-4.3.2", true,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_mipsel_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.mipsel, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.mipsel, OSList.Linux,
 				"linux-mipsel-32bit", false, "linux-mipsel-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_ppc_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.ppc32, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.ppc32, OSList.Linux,
 				"linux-ppc-32bit", false, "linux-ppc-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_linux_sh4_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.sh4, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.sh4, OSList.Linux,
 				"linux-sh4-32bit", false, "linux-sh4-32bit-3.4.6", false,
 				null);
 
 		// Client
 		public static readonly BuildSoftware vpnclient_linux_x86_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.x86, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.x86, OSList.Linux,
 				"linux-x86-32bit", true, "linux-x86-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_x64_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.x64, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.x64, OSList.Linux,
 				"linux-x86-64bit", true, "linux-x86-64bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_arm_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.arm, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.arm, OSList.Linux,
 				"linux-arm-32bit", false, "linux-arm-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_armeabi_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.armeabi, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.armeabi, OSList.Linux,
 				"linux-armeabi-32bit", false, "linux-armeabi-32bit-4.3.2", true,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_mipsel_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.mipsel, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.mipsel, OSList.Linux,
 				"linux-mipsel-32bit", false, "linux-mipsel-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_ppc_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.ppc32, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.ppc32, OSList.Linux,
 				"linux-ppc-32bit", false, "linux-ppc-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnclient_linux_sh4_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.sh4, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.sh4, OSList.Linux,
 				"linux-sh4-32bit", false, "linux-sh4-32bit-3.4.6", false,
 				null);
 
 		// Bridge
 		public static readonly BuildSoftware vpnbridge_linux_x86_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x86, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x86, OSList.Linux,
 				"linux-x86-32bit", true, "linux-x86-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_x64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x64, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x64, OSList.Linux,
 				"linux-x86-64bit", true, "linux-x86-64bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_arm_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.arm, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.arm, OSList.Linux,
 				"linux-arm-32bit", false, "linux-arm-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_armeabi_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.armeabi, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.armeabi, OSList.Linux,
 				"linux-armeabi-32bit", false, "linux-armeabi-32bit-4.3.2", true,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_mipsel_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.mipsel, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.mipsel, OSList.Linux,
 				"linux-mipsel-32bit", false, "linux-mipsel-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_ppc_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.ppc32, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.ppc32, OSList.Linux,
 				"linux-ppc-32bit", false, "linux-ppc-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_linux_sh4_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.sh4, OSList.Linux,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.sh4, OSList.Linux,
 				"linux-sh4-32bit", false, "linux-sh4-32bit-3.4.6", false,
 				null);
 
@@ -236,21 +251,21 @@ namespace BuildUtil
 		// ========== FreeBSD ==========
 		// Server
 		public static readonly BuildSoftware vpnserver_bsd_x86_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x86, OSList.FreeBSD,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x86, OSList.FreeBSD,
 				"freebsd-x86-32bit", true, "freebsd-x86-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnserver_bsd_x64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x64, OSList.FreeBSD,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x64, OSList.FreeBSD,
 				"freebsd-x86-64bit", true, "freebsd-x86-64bit-3.4.6", false,
 				null);
 
 		// Bridge
 		public static readonly BuildSoftware vpnbridge_bsd_x86_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x86, OSList.FreeBSD,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x86, OSList.FreeBSD,
 				"freebsd-x86-32bit", true, "freebsd-x86-32bit-3.4.6", false,
 				null);
 		public static readonly BuildSoftware vpnbridge_bsd_x64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x64, OSList.FreeBSD,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x64, OSList.FreeBSD,
 				"freebsd-x86-64bit", true, "freebsd-x86-64bit-3.4.6", false,
 				null);
 
@@ -258,92 +273,92 @@ namespace BuildUtil
 		// ========== Mac OS X ==========
 		// Server
 		public static readonly BuildSoftware vpnserver_macos_ppc32_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.ppc32, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.ppc32, OSList.MacOS,
 				"macos-ppc-32bit", true, "macos-ppc-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnserver_macos_ppc64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.ppc64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.ppc64, OSList.MacOS,
 				"macos-ppc-64bit", true, "macos-ppc-64bit-4.0.4", true,
 				null);
 		public static readonly BuildSoftware vpnserver_macos_x86_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x86, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x86, OSList.MacOS,
 				"macos-x86-32bit", true, "macos-x86-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnserver_macos_x64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x64, OSList.MacOS,
 				"macos-x86-64bit", true, "macos-x86-64bit-4.0.4", true,
 				null);
 
 		// Client
 		public static readonly BuildSoftware vpnclient_macos_ppc32_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.ppc32, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.ppc32, OSList.MacOS,
 				"macos-ppc-32bit", true, "macos-ppc-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnclient_macos_ppc64_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.ppc64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.ppc64, OSList.MacOS,
 				"macos-ppc-64bit", true, "macos-ppc-64bit-4.0.4", true,
 				null);
 		public static readonly BuildSoftware vpnclient_macos_x86_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.x86, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.x86, OSList.MacOS,
 				"macos-x86-32bit", true, "macos-x86-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnclient_macos_x64_ja =
-			new BuildSoftwareUnix(Software.vpnclient, 0, 0, "", CpuList.x64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnclient, 0, 0, 0, "", CpuList.x64, OSList.MacOS,
 				"macos-x86-64bit", true, "macos-x86-64bit-4.0.4", true,
 				null);
 
 		// Bridge
 		public static readonly BuildSoftware vpnbridge_macos_ppc32_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.ppc32, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.ppc32, OSList.MacOS,
 				"macos-ppc-32bit", true, "macos-ppc-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnbridge_macos_ppc64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.ppc64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.ppc64, OSList.MacOS,
 				"macos-ppc-64bit", true, "macos-ppc-64bit-4.0.4", true,
 				null);
 		public static readonly BuildSoftware vpnbridge_macos_x86_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x86, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x86, OSList.MacOS,
 				"macos-x86-32bit", true, "macos-x86-32bit-4.0.4", true,
 				"-isysroot /cygdrive/s/CommomDev/xc/common/apple_xcode/xcode_2.4/Developer/SDKs/MacOSX10.4u.sdk");
 		public static readonly BuildSoftware vpnbridge_macos_x64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x64, OSList.MacOS,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x64, OSList.MacOS,
 				"macos-x86-64bit", true, "macos-x86-64bit-4.0.4", true,
 				null);
 
 		// ========== Solaris ==========
 		// Server
 		public static readonly BuildSoftware vpnserver_solaris_sparc32_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.sparc32, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.sparc32, OSList.Solaris,
 				"solaris-sparc-32bit", true, "solaris-sparc-32bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnserver_solaris_sparc64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.sparc64, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.sparc64, OSList.Solaris,
 				"solaris-sparc-64bit", true, "solaris-sparc-64bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnserver_solaris_x86_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x86, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x86, OSList.Solaris,
 				"solaris-x86-32bit", true, "solaris-x86-32bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnserver_solaris_x64_ja =
-			new BuildSoftwareUnix(Software.vpnserver, 0, 0, "", CpuList.x64, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnserver, 0, 0, 0, "", CpuList.x64, OSList.Solaris,
 				"solaris-x86-64bit", true, "solaris-x86-64bit-3.4.6", true,
 				null);
 
 		// Bridge
 		public static readonly BuildSoftware vpnbridge_solaris_sparc32_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.sparc32, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.sparc32, OSList.Solaris,
 				"solaris-sparc-32bit", true, "solaris-sparc-32bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnbridge_solaris_sparc64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.sparc64, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.sparc64, OSList.Solaris,
 				"solaris-sparc-64bit", true, "solaris-sparc-64bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnbridge_solaris_x86_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x86, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x86, OSList.Solaris,
 				"solaris-x86-32bit", true, "solaris-x86-32bit-3.4.6", true,
 				null);
 		public static readonly BuildSoftware vpnbridge_solaris_x64_ja =
-			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, "", CpuList.x64, OSList.Solaris,
+			new BuildSoftwareUnix(Software.vpnbridge, 0, 0, 0, "", CpuList.x64, OSList.Solaris,
 				"solaris-x86-64bit", true, "solaris-x86-64bit-3.4.6", true,
 				null);
 
@@ -415,7 +430,7 @@ namespace BuildUtil
 	{
 		// Windows
 		public static readonly OS Windows = new OS("windows", "Windows",
-			"Windows 98 / 98 SE / ME / NT 4.0 SP6a / 2000 SP4 / XP SP2, SP3 / Vista SP1, SP2 / 7 SP1 / 8 / 8.1 / Server 2003 SP2 / Server 2008 SP1, SP2 / Hyper-V Server 2008 / Server 2008 R2 SP1 / Hyper-V Server 2008 R2 / Server 2012 / Hyper-V Server 2012 / Server 2012 R2 / Hyper-V Server 2012 R2",
+			"Windows 98 / 98 SE / ME / NT 4.0 SP6a / 2000 SP4 / XP SP2, SP3 / Vista SP1, SP2 / 7 SP1 / 8 / 8.1 / 10 / Server 2003 SP2 / Server 2008 SP1, SP2 / Hyper-V Server 2008 / Server 2008 R2 SP1 / Hyper-V Server 2008 R2 / Server 2012 / Hyper-V Server 2012 / Server 2012 R2 / Hyper-V Server 2012 R2 / Server 2016",
 			new Cpu[]
 			{
 				CpuList.intel,
@@ -423,7 +438,7 @@ namespace BuildUtil
 
 		// Linux
 		public static readonly OS Linux = new OS("linux", "Linux",
-			"Linux Kernel 2.4 / 2.6 / 3.x",
+			"Linux Kernel 2.4 / 2.6 / 3.x / 4.x",
 			new Cpu[]
 			{
 				CpuList.x86,
@@ -549,7 +564,3 @@ namespace BuildUtil
 	}
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // SeLow: SoftEther Lightweight Network Protocol
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -111,6 +126,131 @@
 #include <Mayaqua/Mayaqua.h>
 #include <Cedar/Cedar.h>
 
+// Load the drivers hive
+bool SuLoadDriversHive()
+{
+	wchar_t config_dir[MAX_PATH];
+	wchar_t filename[MAX_PATH];
+	if (MsIsWindows10() == false)
+	{
+		return false;
+	}
+
+	MsEnablePrivilege(SE_RESTORE_NAME, true);
+	MsEnablePrivilege(SE_BACKUP_NAME, true);
+
+	CombinePathW(config_dir, sizeof(config_dir), MsGetSystem32DirW(), L"config");
+	CombinePathW(filename, sizeof(filename), config_dir, L"DRIVERS");
+
+	return MsRegLoadHive(REG_LOCAL_MACHINE, L"DRIVERS", filename);
+}
+
+// Unload the drivers hive
+bool SuUnloadDriversHive()
+{
+	// todo: always failed.
+	if (MsIsWindows10() == false)
+	{
+		return false;
+	}
+
+	return MsRegUnloadHive(REG_LOCAL_MACHINE, L"DRIVERS");
+}
+
+// Delete garbage inf files
+void SuDeleteGarbageInfs()
+{
+	void *wow;
+	bool load_hive = false;
+	Debug("SuDeleteGarbageInfs()\n");
+
+	wow = MsDisableWow64FileSystemRedirection();
+
+	load_hive = SuLoadDriversHive();
+	Debug("SuLoadDriversHive: %u\n", load_hive);
+
+	SuDeleteGarbageInfsInner();
+
+	/*
+	if (load_hive)
+	{
+		Debug("SuUnloadDriversHive: %u\n", SuUnloadDriversHive());
+	}*/
+
+	MsRestoreWow64FileSystemRedirection(wow);
+}
+void SuDeleteGarbageInfsInner()
+{
+	char *base_key_name = "DRIVERS\\DriverDatabase\\DriverPackages";
+	TOKEN_LIST *keys;
+	HINSTANCE hSetupApiDll = NULL;
+	BOOL (WINAPI *_SetupUninstallOEMInfA)(PCSTR, DWORD, PVOID) = NULL;
+
+	if (MsIsWindows10() == false)
+	{
+		return;
+	}
+
+	hSetupApiDll = LoadLibraryA("setupapi.dll");
+	if (hSetupApiDll == NULL)
+	{
+		return;
+	}
+
+	_SetupUninstallOEMInfA =
+		(UINT (__stdcall *)(PCSTR,DWORD,PVOID))
+		GetProcAddress(hSetupApiDll, "SetupUninstallOEMInfA");
+
+	if (_SetupUninstallOEMInfA != NULL)
+	{
+		keys = MsRegEnumKeyEx2(REG_LOCAL_MACHINE, base_key_name, false, true);
+
+		if (keys != NULL)
+		{
+			char full_key[MAX_PATH];
+			UINT i;
+
+			for (i = 0;i < keys->NumTokens;i++)
+			{
+				char *oem_name, *inf_name, *provider;
+
+				Format(full_key, sizeof(full_key), "%s\\%s", base_key_name, keys->Token[i]);
+
+				oem_name = MsRegReadStrEx2(REG_LOCAL_MACHINE, full_key, "", false, true);
+				inf_name = MsRegReadStrEx2(REG_LOCAL_MACHINE, full_key, "InfName", false, true);
+				provider = MsRegReadStrEx2(REG_LOCAL_MACHINE, full_key, "Provider", false, true);
+
+				if (IsEmptyStr(oem_name) == false && IsEmptyStr(inf_name) == false)
+				{
+					if (StartWith(oem_name, "oem"))
+					{
+						if (StartWith(inf_name, "selow"))
+						{
+							if (InStr(provider, "softether"))
+							{
+								Debug("Delete OEM INF %s (%s): %u\n",
+									oem_name, inf_name,
+									_SetupUninstallOEMInfA(oem_name, 0x00000001, NULL));
+							}
+						}
+					}
+				}
+
+				Free(oem_name);
+				Free(inf_name);
+				Free(provider);
+			}
+
+			FreeToken(keys);
+		}
+	}
+
+	if (hSetupApiDll != NULL)
+	{
+		FreeLibrary(hSetupApiDll);
+	}
+}
+
 // Install the driver
 bool SuInstallDriver(bool force)
 {
@@ -139,15 +279,9 @@ bool SuInstallDriverInner(bool force)
 	wchar_t tmp_dir[MAX_PATH];
 	char *cpu_type = MsIsX64() ? "x64" : "x86";
 
-	if (SuIsSupportedOs() == false)
+	if (SuIsSupportedOs(true) == false)
 	{
 		// Unsupported OS
-		return false;
-	}
-
-	if (MsIsServiceRunning("RemoteAccess"))
-	{
-		// Remote Access service is running
 		return false;
 	}
 
@@ -166,11 +300,13 @@ bool SuInstallDriverInner(bool force)
 		char *path;
 
 		// Read the current version from the registry
-		current_sl_ver = MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, SL_REG_VER_VALUE, false, true);
+		current_sl_ver = MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME,
+			(MsIsWindows10() ? SL_REG_VER_VALUE_WIN10 : SL_REG_VER_VALUE),
+			false, true);
 
 		path = MsRegReadStrEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "ImagePath", false, true);
 
-		if (IsEmptyStr(path))
+		if (IsEmptyStr(path) || IsFileExists(path) == false || MsIsServiceInstalled(SL_PROTOCOL_NAME) == false)
 		{
 			current_sl_ver = 0;
 		}
@@ -186,12 +322,34 @@ bool SuInstallDriverInner(bool force)
 	}
 
 	// Copy necessary files to a temporary directory
-	UniFormat(src_sys, sizeof(src_sys), L"|SeLow_%S.sys", cpu_type);
-	UniFormat(src_cat, sizeof(src_cat), L"|inf\\selow_%S\\inf.cat", cpu_type);
-	UniFormat(src_inf, sizeof(src_inf), L"|inf\\selow_%S\\SeLow_%S.inf", cpu_type, cpu_type);
+	UniFormat(src_sys, sizeof(src_sys), L"|DriverPackages\\%S\\%S\\SeLow_%S.sys",
+		(MsIsWindows10() ? "SeLow_Win10" : "SeLow_Win8"),
+		cpu_type, cpu_type);
+	if (MsIsWindows8() == false)
+	{
+		// Windows Vista and Windows 7 uses SHA-1 catalog files
+		UniFormat(src_cat, sizeof(src_cat), L"|DriverPackages\\SeLow_Win8\\%S\\inf.cat", cpu_type);
+	}
+	else
+	{
+		// Windows 8 or above uses SHA-256 catalog files
+		UniFormat(src_cat, sizeof(src_cat), L"|DriverPackages\\SeLow_Win8\\%S\\inf2.cat", cpu_type);
+
+		if (MsIsWindows10())
+		{
+			// Windows 10 uses WHQL catalog files
+			UniFormat(src_cat, sizeof(src_cat), L"|DriverPackages\\SeLow_Win10\\%S\\SeLow_Win10_%S.cat", cpu_type, cpu_type);
+		}
+	}
+	UniFormat(src_inf, sizeof(src_inf), L"|DriverPackages\\%S\\%S\\SeLow_%S.inf",
+		(MsIsWindows10() ? "SeLow_Win10" : "SeLow_Win8"),
+		cpu_type, cpu_type);
 
 	UniFormat(dst_sys, sizeof(dst_cat), L"%s\\SeLow_%S.sys", tmp_dir, cpu_type);
-	UniFormat(dst_cat, sizeof(dst_cat), L"%s\\inf_selow.cat", tmp_dir);
+	UniFormat(dst_cat, sizeof(dst_cat), L"%s\\SeLow_%S_%S.cat", tmp_dir,
+		(MsIsWindows10() ? "Win10" : "Win8"),
+		cpu_type);
+
 	UniFormat(dst_inf, sizeof(dst_inf), L"%s\\SeLow_%S.inf", tmp_dir, cpu_type);
 
 	if (FileCopyW(src_sys, dst_sys) &&
@@ -201,6 +359,21 @@ bool SuInstallDriverInner(bool force)
 		NO_WARNING *nw;
 
 		nw = MsInitNoWarningEx(SL_USER_AUTO_PUSH_TIMER);
+
+		if (MsIsWindows10())
+		{
+			if (MsIsServiceInstalled(SL_PROTOCOL_NAME) == false && MsIsServiceRunning(SL_PROTOCOL_NAME) == false)
+			{
+				// On Windows 10, if there are no SwLow service installed, then uinstall the protocol driver first.
+				// TODO: currently do nothing. On some versions of Windows 10 beta builds it is necessary to do something...
+			}
+		}
+
+		if (MsIsWindows10())
+		{
+			// Delete garbage INFs
+			SuDeleteGarbageInfs();
+		}
 
 		// Call the installer
 		if (InstallNdisProtocolDriver(dst_inf, L"SeLow", SL_USER_INSTALL_LOCK_TIMEOUT) == false)
@@ -212,12 +385,14 @@ bool SuInstallDriverInner(bool force)
 			Debug("InstallNdisProtocolDriver Ok.\n");
 
 			// Copy manually because there are cases where .sys file is not copied successfully for some reason
-			FileCopyW(src_sys, sys_fullpath);
+			Debug("SuCopySysFile from %S to %s: ret = %u\n", src_sys, sys_fullpath, SuCopySysFile(src_sys, sys_fullpath));
 
 			ret = true;
 
 			// Write the version number into the registry
-			MsRegWriteIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, SL_REG_VER_VALUE, SL_VER, false, true);
+			MsRegWriteIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME,
+				(MsIsWindows10() ? SL_REG_VER_VALUE_WIN10 : SL_REG_VER_VALUE),
+				SL_VER, false, true);
 
 			// Set to automatic startup
 			MsRegWriteIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "Start", SERVICE_SYSTEM_START, false, true);
@@ -239,13 +414,93 @@ bool SuInstallDriverInner(bool force)
 	return ret;
 }
 
-// Get whether the current OS is supported by SeLow
-bool SuIsSupportedOs()
+// Copy a sys file
+bool SuCopySysFile(wchar_t *src, wchar_t *dst)
 {
+	wchar_t dst_rename[MAX_PATH];
+	UINT i;
+	if (src == NULL || dst == NULL)
+	{
+		return false;
+	}
+	if (FileCopyW(src, dst))
+	{
+		for (i = 1;i <= 100;i++)
+		{
+			UniFormat(dst_rename, sizeof(dst_rename), L"%s.old%u", dst, i);
+
+			FileDeleteW(dst_rename);
+		}
+
+		return true;
+	}
+
+	for (i = 1;;i++)
+	{
+		UniFormat(dst_rename, sizeof(dst_rename), L"%s.old%u", dst, i);
+
+		if (IsFileExistsW(dst_rename) == false)
+		{
+			break;
+		}
+
+		if (i >= 100)
+		{
+			return false;
+		}
+	}
+
+	if (MoveFileW(dst, dst_rename) == false)
+	{
+		return false;
+	}
+
+	if (FileCopyW(src, dst))
+	{
+		for (i = 1;i <= 100;i++)
+		{
+			UniFormat(dst_rename, sizeof(dst_rename), L"%s.old%u", dst, i);
+
+			FileDeleteW(dst_rename);
+		}
+
+		return true;
+	}
+
+	MoveFileW(dst_rename, dst);
+
+	return false;
+}
+
+// Get whether the current OS is supported by SeLow
+bool SuIsSupportedOs(bool on_install)
+{
+	if (MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "EnableSeLow", false, true) != 0)
+	{
+		// Force enable
+		return true;
+	}
+
 	if (MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "DisableSeLow", false, true) != 0)
 	{
 		// Force disable
 		return false;
+	}
+
+	if (MsIsWindows10())
+	{
+		// Windows 10 or later are always supported.
+		return true;
+	}
+
+	if (on_install)
+	{
+		// If Microsoft Routing and Remote Access service is running,
+		// then return false.
+		if (MsIsServiceRunning("RemoteAccess"))
+		{
+			return false;
+		}
 	}
 
 	// If the Su driver is currently running,
@@ -261,11 +516,14 @@ bool SuIsSupportedOs()
 		return false;
 	}
 
-	// If Microsoft Routing and Remote Access service is running,
-	// then return false.
-	if (MsIsServiceRunning("RemoteAccess"))
+	if (on_install == false)
 	{
-		return false;
+		// If Microsoft Routing and Remote Access service is running,
+		// then return false.
+		if (MsIsServiceRunning("RemoteAccess"))
+		{
+			return false;
+		}
 	}
 
 	return true;
@@ -581,7 +839,7 @@ LIST *SuGetAdapterList(SU *u)
 		return NULL;
 	}
 
-	ret = NewList(SuCmpAdaterList);
+	ret = NewList(SuCmpAdapterList);
 
 	// Enumerate adapters
 	Zero(&u->AdapterInfoList, sizeof(u->AdapterInfoList));
@@ -611,7 +869,7 @@ LIST *SuGetAdapterList(SU *u)
 }
 
 // Comparison function of the adapter list
-int SuCmpAdaterList(void *p1, void *p2)
+int SuCmpAdapterList(void *p1, void *p2)
 {
 	int r;
 	SU_ADAPTER_LIST *a1, *a2;
@@ -704,8 +962,9 @@ SU *SuInitEx(UINT wait_for_bind_complete_tick)
 	UINT read_size;
 	bool flag = false;
 	UINT64 giveup_tick = 0;
+	static bool flag2 = false; // flag2 must be global
 
-	if (SuIsSupportedOs() == false)
+	if (SuIsSupportedOs(false) == false)
 	{
 		// Unsupported OS
 		return NULL;
@@ -727,6 +986,19 @@ LABEL_RETRY:
 			if (MsStartService(SL_PROTOCOL_NAME) == false)
 			{
 				Debug("MsStartService(%s) Failed.\n", SL_PROTOCOL_NAME);
+
+				if (MsIsWindows10())
+				{
+					if (flag2 == false)
+					{
+						flag2 = true;
+
+						if (SuInstallDriver(true))
+						{
+							goto LABEL_RETRY;
+						}
+					}
+				}
 			}
 			else
 			{
@@ -811,7 +1083,3 @@ void SuFree(SU *u)
 
 #endif	// WIN32
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

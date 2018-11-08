@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -102,6 +117,34 @@
 static UINT init_cedar_counter = 0;
 static REF *cedar_log_ref = NULL;
 static LOG *cedar_log;
+
+// Check whether there is any EAP-enabled RADIUS configuration
+bool CedarIsThereAnyEapEnabledRadiusConfig(CEDAR *c)
+{
+	bool ret = false;
+	UINT i;
+	if (c == NULL)
+	{
+		return false;
+	}
+
+	LockHubList(c);
+	{
+		for (i = 0;i < LIST_NUM(c->HubList);i++)
+		{
+			HUB *hub = LIST_DATA(c->HubList, i);
+
+			if (hub->RadiusConvertAllMsChapv2AuthRequestToEap)
+			{
+				ret = true;
+				break;
+			}
+		}
+	}
+	UnlockHubList(c);
+
+	return ret;
+}
 
 // Get build date of current code
 UINT64 GetCurrentBuildDate()
@@ -220,6 +263,16 @@ bool IsSupportedWinVer(RPC_WINVER *v)
 		}
 	}
 
+	if ((v->VerMajor == 6 && v->VerMinor == 4) || (v->VerMajor == 10 && v->VerMinor == 0))
+	{
+		// Windows 10 or Windows Server 2016
+		if (v->ServicePack <= 0)
+		{
+			// SP0 only
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -322,34 +375,6 @@ int CompareNoSslList(void *p1, void *p2)
 		return 0;
 	}
 	return CmpIpAddr(&n1->IpAddress, &n2->IpAddress);
-}
-
-// Check whether the specified IP address is in Non-SSL connection list
-bool IsInNoSsl(CEDAR *c, IP *ip)
-{
-	bool ret = false;
-	// Validate arguments
-	if (c == NULL || ip == NULL)
-	{
-		return false;
-	}
-
-	LockList(c->NonSslList);
-	{
-		NON_SSL *n = SearchNoSslList(c, ip);
-
-		if (n != NULL)
-		{
-			if (n->EntryExpires > Tick64() && n->Count > NON_SSL_MIN_COUNT)
-			{
-				n->EntryExpires = Tick64() + (UINT64)NON_SSL_ENTRY_EXPIRES;
-				ret = true;
-			}
-		}
-	}
-	UnlockList(c->NonSslList);
-
-	return ret;
 }
 
 // Decrement connection count of Non-SSL connection list entry 
@@ -506,42 +531,6 @@ void FreeNoSslList(CEDAR *c)
 	c->NonSslList = NULL;
 }
 
-// Write a message into Cedar log
-void CedarLog(char *str)
-{
-	char *tmp;
-	// Validate arguments
-	if (str == NULL)
-	{
-		return;
-	}
-	if (cedar_log_ref == NULL)
-	{
-		return;
-	}
-
-	tmp = CopyStr(str);
-
-	if (StrLen(tmp) > 1)
-	{
-		if (tmp[StrLen(tmp) - 1] == '\n')
-		{
-			tmp[StrLen(tmp) - 1] = 0;
-		}
-		if (StrLen(tmp) > 1)
-		{
-			if (tmp[StrLen(tmp) - 1] == '\r')
-			{
-				tmp[StrLen(tmp) - 1] = 0;
-			}
-		}
-	}
-
-	InsertStringRecord(cedar_log, tmp);
-
-	Free(tmp);
-}
-
 // Start Cedar log
 void StartCedarLog()
 {
@@ -598,37 +587,6 @@ UINT64 GetTrafficPacketNum(TRAFFIC *t)
 
 	return t->Recv.BroadcastCount + t->Recv.UnicastCount +
 		t->Send.BroadcastCount + t->Send.UnicastCount;
-}
-
-// Get whether hidden password is changed in UI
-bool IsHiddenPasswordChanged(char *str)
-{
-	// Validate arguments
-	if (str == NULL)
-	{
-		return true;
-	}
-
-	if (StrCmpi(str, HIDDEN_PASSWORD) == 0)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-// Initialize hidden password in UI
-void InitHiddenPassword(char *str, UINT size)
-{
-	// Validate arguments
-	if (str == NULL)
-	{
-		return;
-	}
-
-	StrCpy(str, size, HIDDEN_PASSWORD);
 }
 
 // Check whether the certificate is signed by CA which is trusted by the hub 
@@ -825,47 +783,6 @@ void DelConnection(CEDAR *cedar, CONNECTION *c)
 	UnlockList(cedar->ConnectionList);
 }
 
-// Get the number of unestablished connections
-UINT GetUnestablishedConnections(CEDAR *cedar)
-{
-	UINT i, ret;
-	// Validate arguments
-	if (cedar == NULL)
-	{
-		return 0;
-	}
-
-	ret = 0;
-
-	LockList(cedar->ConnectionList);
-	{
-		for (i = 0;i < LIST_NUM(cedar->ConnectionList);i++)
-		{
-			CONNECTION *c = LIST_DATA(cedar->ConnectionList, i);
-
-			switch (c->Type)
-			{
-			case CONNECTION_TYPE_CLIENT:
-			case CONNECTION_TYPE_INIT:
-			case CONNECTION_TYPE_LOGIN:
-			case CONNECTION_TYPE_ADDITIONAL:
-				switch (c->Status)
-				{
-				case CONNECTION_STATUS_ACCEPTED:
-				case CONNECTION_STATUS_NEGOTIATION:
-				case CONNECTION_STATUS_USERAUTH:
-					ret++;
-					break;
-				}
-				break;
-			}
-		}
-	}
-	UnlockList(cedar->ConnectionList);
-
-	return ret + Count(cedar->AcceptingSockets);
-}
-
 // Add connection to Cedar
 void AddConnection(CEDAR *cedar, CONNECTION *c)
 {
@@ -880,6 +797,8 @@ void AddConnection(CEDAR *cedar, CONNECTION *c)
 	// Determine the name of the connection
 	i = Inc(cedar->ConnectionIncrement);
 	Format(tmp, sizeof(tmp), "CID-%u", i);
+
+
 	Lock(c->lock);
 	{
 		Free(c->Name);
@@ -1134,6 +1053,118 @@ void StopAllListener(CEDAR *c)
 	Free(array);
 }
 
+// Budget management functions
+void CedarAddQueueBudget(CEDAR *c, int diff)
+{
+	// Validate arguments
+	if (c == NULL || diff == 0)
+	{
+		return;
+	}
+
+	Lock(c->QueueBudgetLock);
+	{
+		int v = (int)c->QueueBudget;
+		v += diff;
+		c->QueueBudget = (UINT)v;
+	}
+	Unlock(c->QueueBudgetLock);
+}
+void CedarAddFifoBudget(CEDAR *c, int diff)
+{
+	// Validate arguments
+	if (c == NULL || diff == 0)
+	{
+		return;
+	}
+
+	Lock(c->FifoBudgetLock);
+	{
+		int v = (int)c->FifoBudget;
+		v += diff;
+		c->FifoBudget = (UINT)v;
+	}
+	Unlock(c->FifoBudgetLock);
+}
+UINT CedarGetQueueBudgetConsuming(CEDAR *c)
+{
+	// Validate arguments
+	if (c == NULL)
+	{
+		return 0;
+	}
+
+	return c->QueueBudget;
+}
+UINT CedarGetFifoBudgetConsuming(CEDAR *c)
+{
+	// Validate arguments
+	if (c == NULL)
+	{
+		return 0;
+	}
+
+	return c->FifoBudget;
+}
+UINT CedarGetQueueBudgetBalance(CEDAR *c)
+{
+	UINT current = CedarGetQueueBudgetConsuming(c);
+	UINT budget = QUEUE_BUDGET;
+
+	if (current <= budget)
+	{
+		return budget - current;
+	}
+	else
+	{
+		return 0;
+	}
+}
+UINT CedarGetFifoBudgetBalance(CEDAR *c)
+{
+	UINT current = CedarGetFifoBudgetConsuming(c);
+	UINT budget = FIFO_BUDGET;
+
+	if (current <= budget)
+	{
+		return budget - current;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+// Add the current TCP queue size
+void CedarAddCurrentTcpQueueSize(CEDAR *c, int diff)
+{
+	// Validate arguments
+	if (c == NULL || diff == 0)
+	{
+		return;
+	}
+
+	Lock(c->CurrentTcpQueueSizeLock);
+	{
+		int v = (int)c->CurrentTcpQueueSize;
+		v += diff;
+		c->CurrentTcpQueueSize = (UINT)v;
+	}
+	Unlock(c->CurrentTcpQueueSizeLock);
+}
+
+// Get the current TCP queue size
+UINT CedarGetCurrentTcpQueueSize(CEDAR *c)
+{
+	// Validate arguments
+	if (c == NULL)
+	{
+		return 0;
+	}
+
+	return c->CurrentTcpQueueSize;
+}
+
 // Stop Cedar
 void StopCedar(CEDAR *c)
 {
@@ -1253,6 +1284,12 @@ void CleanupCedar(CEDAR *c)
 	DeleteLock(c->OpenVPNPublicPortsLock);
 
 	DeleteLock(c->CurrentRegionLock);
+
+	DeleteLock(c->CurrentTcpQueueSizeLock);
+	DeleteLock(c->QueueBudgetLock);
+	DeleteLock(c->FifoBudgetLock);
+
+	DeleteCounter(c->CurrentActiveLinks);
 
 	Free(c);
 }
@@ -1452,18 +1489,6 @@ void SetCedarCert(CEDAR *c, X *server_x, K *server_k)
 	Unlock(c->lock);
 }
 
-// Enable debug log
-void EnableDebugLog(CEDAR *c)
-{
-	// Validate arguments
-	if (c == NULL || c->DebugLog != NULL)
-	{
-		return;
-	}
-
-	c->DebugLog = NewLog("cedar_debug_log", "cedar", LOG_SWITCH_NO);
-}
-
 // Set the Cedar into VPN Bridge mode
 void SetCedarVpnBridge(CEDAR *c)
 {
@@ -1492,9 +1517,19 @@ void GetCedarVersion(char *tmp, UINT size)
 		return;
 	}
 
-	Format(tmp, size, "%u.%02u.%u",
-		CEDAR_VER / 100, CEDAR_VER - (CEDAR_VER / 100) * 100,
-		CEDAR_BUILD);
+	Format(tmp, size, "%u.%02u.%u", CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD);
+}
+
+UINT GetCedarVersionNumber()
+{
+	UINT pow = 10;
+
+	while (CEDAR_VERSION_MAJOR >= pow)
+	{
+		pow *= 10;
+	}
+
+	return CEDAR_VERSION_MAJOR * pow + CEDAR_VERSION_MINOR;
 }
 
 // Create Cedar object
@@ -1509,11 +1544,15 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 
 	c = ZeroMalloc(sizeof(CEDAR));
 
+	c->CurrentActiveLinks = NewCounter();
+
 	c->AcceptingSockets = NewCounter();
 
 	c->CedarSuperLock = NewLock();
 
 	c->CurrentRegionLock = NewLock();
+
+	StrCpy(c->OpenVPNDefaultClientOption, sizeof(c->OpenVPNDefaultClientOption), OVPN_DEF_CLIENT_OPTION_STRING);
 
 #ifdef	BETA_NUMBER
 	c->Beta = BETA_NUMBER;
@@ -1523,6 +1562,10 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 
 	c->AssignedBridgeLicense = NewCounter();
 	c->AssignedClientLicense = NewCounter();
+
+	c->CurrentTcpQueueSizeLock = NewLock();
+	c->QueueBudgetLock = NewLock();
+	c->FifoBudgetLock = NewLock();
 
 	Rand(c->UniqueId, sizeof(c->UniqueId));
 
@@ -1548,8 +1591,8 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 		c->ServerX = CloneX(server_x);
 	}
 
-	c->Version = CEDAR_VER;
-	c->Build = CEDAR_BUILD;
+	c->Version = GetCedarVersionNumber();
+	c->Build = CEDAR_VERSION_BUILD;
 	c->ServerStr = CopyStr(CEDAR_SERVER_STR);
 
 	GetMachineName(tmp, sizeof(tmp));
@@ -1566,11 +1609,13 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 
 	c->TrafficDiffList = NewList(NULL);
 
-	SetCedarCipherList(c, "RC4-MD5");
+	SetCedarCipherList(c, SERVER_DEFAULT_CIPHER_NAME);
 
 	c->ClientId = _II("CLIENT_ID");
 
 	c->UdpPortList = NewIntList(false);
+
+	c->DhParamBits = DH_PARAM_BITS_DEFAULT;
 
 	InitNetSvcList(c);
 
@@ -1593,8 +1638,7 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 	ToStr(tmp2, c->Beta);
 
 	Format(tmp, sizeof(tmp), "Version %u.%02u Build %u %s %s (%s)",
-		CEDAR_VER / 100, CEDAR_VER - (CEDAR_VER / 100) * 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		c->Beta == 0 ? "" : beta_str,
 		c->Beta == 0 ? "" : tmp2,
 		_SS("LANGSTR"));
@@ -1620,40 +1664,6 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 	c->BuildInfo = CopyStr(tmp);
 
 	return c;
-}
-
-// Check whether the Cedar was build after the specified date
-bool IsLaterBuild(CEDAR *c, UINT64 t)
-{
-	SYSTEMTIME sb, st;
-	UINT64 b;
-	// Validate arguments
-	if (c == NULL)
-	{
-		return false;
-	}
-
-	Zero(&sb, sizeof(sb));
-	Zero(&st, sizeof(st));
-
-	UINT64ToSystem(&sb, c->BuiltDate);
-	UINT64ToSystem(&st, t);
-
-	// Ignore time of the day
-	sb.wHour = sb.wMinute = sb.wSecond = sb.wMilliseconds = 0;
-	st.wHour = st.wMinute = st.wSecond = st.wMilliseconds = 0;
-
-	b = SystemToUINT64(&sb);
-	t = SystemToUINT64(&st);
-
-	if (b > t)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
 }
 
 // Cumulate traffic size
@@ -1721,7 +1731,3 @@ void FreeCedar()
 	FreeProtocol();
 }
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

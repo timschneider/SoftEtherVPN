@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -120,6 +135,23 @@ typedef struct AUTHUSERCERT AUTHUSERCERT;
 typedef struct AUTHROOTCERT AUTHROOTCERT;
 typedef struct AUTHRADIUS AUTHRADIUS;
 typedef struct AUTHNT AUTHNT;
+
+
+// ==============================================================
+//   RADIUS
+// ==============================================================
+
+typedef struct RADIUS_LOGIN_OPTION RADIUS_LOGIN_OPTION;
+typedef struct RADIUS_PACKET RADIUS_PACKET;
+typedef struct RADIUS_AVP RADIUS_AVP;
+typedef struct EAP_CLIENT EAP_CLIENT;
+typedef struct EAP_MESSAGE EAP_MESSAGE;
+typedef struct EAP_MSCHAPV2_GENERAL EAP_MSCHAPV2_GENERAL;
+typedef struct EAP_MSCHAPV2_CHALLENGE EAP_MSCHAPV2_CHALLENGE;
+typedef struct EAP_MSCHAPV2_RESPONSE EAP_MSCHAPV2_RESPONSE;
+typedef struct EAP_MSCHAPV2_SUCCESS_SERVER EAP_MSCHAPV2_SUCCESS_SERVER;
+typedef struct EAP_MSCHAPV2_SUCCESS_CLIENT EAP_MSCHAPV2_SUCCESS_CLIENT;
+typedef struct EAP_PEAP EAP_PEAP;
 
 
 // ==============================================================
@@ -506,6 +538,8 @@ typedef struct CTC CTC;
 typedef struct CTR CTR;
 typedef struct TTC TTC;
 typedef struct TTS TTS;
+typedef struct TTS_WORKER TTS_WORKER;
+typedef struct TTC_WORKER TTC_WORKER;
 typedef struct TT_RESULT TT_RESULT;
 typedef struct TTS_SOCK TTS_SOCK;
 typedef struct TTC_SOCK TTC_SOCK;
@@ -646,7 +680,7 @@ typedef struct IPC IPC;
 typedef struct IPC_ARP IPC_ARP;
 typedef struct IPC_ASYNC IPC_ASYNC;
 typedef struct IPC_PARAM IPC_PARAM;
-typedef struct IPC_DHCP_RELESAE_QUEUE IPC_DHCP_RELESAE_QUEUE;
+typedef struct IPC_DHCP_RELEASE_QUEUE IPC_DHCP_RELEASE_QUEUE;
 typedef struct IPC_MSCHAP_V2_AUTHINFO IPC_MSCHAP_V2_AUTHINFO;
 
 
@@ -716,6 +750,8 @@ typedef struct MIRROR_SERVER MIRROR_SERVER;
 // ==============================================================
 
 typedef struct NATIVE_STACK NATIVE_STACK;
+typedef struct IPTABLES_STATE IPTABLES_STATE;
+typedef struct IPTABLES_ENTRY IPTABLES_ENTRY;
 
 
 // ==============================================================
@@ -729,7 +765,3 @@ typedef struct SU_ADAPTER_LIST SU_ADAPTER_LIST;
 
 
 #endif	// CEDARTYPE_H
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

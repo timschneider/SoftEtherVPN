@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Mayaqua Kernel
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -185,7 +200,7 @@ struct IPV4_HEADER
 	UCHAR	TypeOfService;				// Service Type
 	USHORT	TotalLength;				// Total size
 	USHORT	Identification;				// Identifier
-	UCHAR	FlagsAndFlagmentOffset[2];	// Flag and Fragment offset
+	UCHAR	FlagsAndFragmentOffset[2];	// Flag and Fragment offset
 	UCHAR	TimeToLive;					// TTL
 	UCHAR	Protocol;					// Protocol
 	USHORT	Checksum;					// Checksum
@@ -200,10 +215,10 @@ struct IPV4_HEADER
 #define	IPV4_SET_HEADER_LEN(h, v)	((h)->VersionAndHeaderLength |= ((v) & 0x0f))
 
 // Macro for IPv4 fragment related operation
-#define	IPV4_GET_FLAGS(h)			(((h)->FlagsAndFlagmentOffset[0] >> 5) & 0x07)
-#define	IPV4_SET_FLAGS(h, v)		((h)->FlagsAndFlagmentOffset[0] |= (((v) & 0x07) << 5))
-#define	IPV4_GET_OFFSET(h)			(((h)->FlagsAndFlagmentOffset[0] & 0x1f) * 256 + ((h)->FlagsAndFlagmentOffset[1]))
-#define	IPV4_SET_OFFSET(h, v)		{(h)->FlagsAndFlagmentOffset[0] |= (UCHAR)((v) / 256); (h)->FlagsAndFlagmentOffset[1] = (UCHAR)((v) % 256);}
+#define	IPV4_GET_FLAGS(h)			(((h)->FlagsAndFragmentOffset[0] >> 5) & 0x07)
+#define	IPV4_SET_FLAGS(h, v)		((h)->FlagsAndFragmentOffset[0] |= (((v) & 0x07) << 5))
+#define	IPV4_GET_OFFSET(h)			(((h)->FlagsAndFragmentOffset[0] & 0x1f) * 256 + ((h)->FlagsAndFragmentOffset[1]))
+#define	IPV4_SET_OFFSET(h, v)		{(h)->FlagsAndFragmentOffset[0] |= (UCHAR)((v) / 256); (h)->FlagsAndFragmentOffset[1] = (UCHAR)((v) % 256);}
 
 // IPv4 / IPv6 common protocol
 #define	IP_PROTO_TCP		0x06	// TCP protocol
@@ -344,7 +359,7 @@ struct DNSV4_HEADER
 struct NBTDG_HEADER
 {
 	UCHAR MessageType;
-	UCHAR MoreFlagments;
+	UCHAR MoreFragments;
 	USHORT DatagramId;
 	UINT SrcIP;
 	USHORT SrcPort;
@@ -426,17 +441,17 @@ struct IPV6_FRAGMENT_HEADER
 {
 	UCHAR NextHeader;					// Next header
 	UCHAR Reserved;						// Reserved
-	UCHAR FlagmentOffset1;				// Fragment offset 1 (/8, 8 bit)
-	UCHAR FlagmentOffset2AndFlags;		// Fragment offset 2 (/8, 5 bit) + Reserved (2 bit) + More flag (1 bit)
+	UCHAR FragmentOffset1;				// Fragment offset 1 (/8, 8 bit)
+	UCHAR FragmentOffset2AndFlags;		// Fragment offset 2 (/8, 5 bit) + Reserved (2 bit) + More flag (1 bit)
 	UINT Identification;				// ID
 } GCC_PACKED;
 
 // Macro for IPv6 fragment header operation
-#define IPV6_GET_FRAGMENT_OFFSET(h)		(((((h)->FlagmentOffset1) << 5) & 0x1fe0) | (((h)->FlagmentOffset2AndFlags >> 3) & 0x1f))
-#define IPV6_SET_FRAGMENT_OFFSET(h, v)	((h)->FlagmentOffset1 = (v / 32) & 0xff,	\
-	((h)->FlagmentOffset2AndFlags = ((v % 256) << 3) & 0xf8) | ((h)->FlagmentOffset2AndFlags & 0x07))
-#define IPV6_GET_FLAGS(h)				((h)->FlagmentOffset2AndFlags & 0x0f)
-#define IPV6_SET_FLAGS(h, v)				((h)->FlagmentOffset2AndFlags = (((h)->FlagmentOffset2AndFlags & 0xf8) | (v & 0x07)))
+#define IPV6_GET_FRAGMENT_OFFSET(h)		(((((h)->FragmentOffset1) << 5) & 0x1fe0) | (((h)->FragmentOffset2AndFlags >> 3) & 0x1f))
+#define IPV6_SET_FRAGMENT_OFFSET(h, v)	((h)->FragmentOffset1 = (v / 32) & 0xff,	\
+	((h)->FragmentOffset2AndFlags = ((v % 256) << 3) & 0xf8) | ((h)->FragmentOffset2AndFlags & 0x07))
+#define IPV6_GET_FLAGS(h)				((h)->FragmentOffset2AndFlags & 0x0f)
+#define IPV6_SET_FLAGS(h, v)				((h)->FragmentOffset2AndFlags = (((h)->FragmentOffset2AndFlags & 0xf8) | (v & 0x07)))
 
 // Flag
 #define IPV6_FRAGMENT_HEADER_FLAG_MORE_FRAGMENTS		0x01	// There are more fragments
@@ -608,8 +623,10 @@ struct ICMPV6_HEADER_INFO
 #define	DHCP_ID_CLIENT_ID			0x3d
 #define	DHCP_ID_VENDOR_ID			0x3c
 #define	DHCP_ID_REQ_PARAM_LIST		0x37
+#define	DHCP_ID_USER_CLASS			0x4d
 #define	DHCP_ID_CLASSLESS_ROUTE		0x79
 #define	DHCP_ID_MS_CLASSLESS_ROUTE	0xF9
+#define	DHCP_ID_PRIVATE				0xFA
 
 
 // DHCP client action
@@ -634,6 +651,7 @@ struct HTTPLOG
 	char Protocol[64];						// Protocol
 	char UserAgent[MAX_SIZE];				// User Agent value
 	char Referer[MAX_SIZE];					// Referer
+	bool IsSsl;								// Is SSL
 };
 
 // Packet
@@ -687,6 +705,7 @@ struct PKT
 	UCHAR				*Payload;		// Pointer to the payload of TCP or UDP
 	UINT				PayloadSize;	// Payload size
 	struct HTTPLOG		*HttpLog;		// HTTP log
+	char DnsQueryHost[64];				// DNS hostname
 } GCC_PACKED;
 
 // Layer-3 packet classification
@@ -710,6 +729,7 @@ struct PKT
 #define	L7_DHCPV4			1		// DHCPv4 packet
 #define	L7_IKECONN			2		// IKE connection request packet
 #define	L7_OPENVPNCONN		3		// OpenVPN connection request packet
+#define L7_DNS				4		// DNS packet
 
 
 // IKE header
@@ -778,6 +798,8 @@ struct DHCP_CLASSLESS_ROUTE_TABLE
 	DHCP_CLASSLESS_ROUTE Entries[MAX_DHCP_CLASSLESS_ROUTE_ENTRIES];	// Entries
 };
 
+#define	MAX_USER_CLASS_LEN	255
+
 // DHCP option list
 struct DHCP_OPTION_LIST
 {
@@ -787,6 +809,10 @@ struct DHCP_OPTION_LIST
 	// Client request
 	UINT RequestedIp;				// Requested IP address
 	char Hostname[MAX_HOST_NAME_LEN + 1]; // Host name
+	char UserClass[MAX_USER_CLASS_LEN + 1]; // User class
+	// RFC3003 defines that User Class option is array of text strings,
+	// but the most popular DHCP clients and servers,
+	// i.e. ISC DHCP and Microsoft DHCP Server, consider it a text string
 
 	// Server response
 	UINT ClientAddress;				// Client address
@@ -834,7 +860,6 @@ void FreePacketUDPv4(PKT *p);
 void FreePacketTCPv4(PKT *p);
 void FreePacketICMPv4(PKT *p);
 void FreePacketDHCPv4(PKT *p);
-bool ParsePacketL2(PKT *p, UCHAR *buf, UINT size);
 bool ParsePacketL2Ex(PKT *p, UCHAR *buf, UINT size, bool no_l3);
 bool ParsePacketARPv4(PKT *p, UCHAR *buf, UINT size);
 bool ParsePacketIPv4(PKT *p, UCHAR *buf, UINT size);
@@ -845,6 +870,7 @@ bool ParseICMPv6(PKT *p, UCHAR *buf, UINT size);
 bool ParseTCP(PKT *p, UCHAR *buf, UINT size);
 bool ParseUDP(PKT *p, UCHAR *buf, UINT size);
 void ParseDHCPv4(PKT *p, UCHAR *buf, UINT size);
+void ParseDNS(PKT *p, UCHAR *buf, UINT size);
 PKT *ClonePacket(PKT *p, bool copy_data);
 void FreeClonePacket(PKT *p);
 
@@ -877,11 +903,11 @@ void FreeDHCPv4Data(DHCPV4_DATA *d);
 bool AdjustTcpMssL3(UCHAR *src, UINT src_size, UINT mss);
 bool AdjustTcpMssL2(UCHAR *src, UINT src_size, UINT mss, USHORT tag_vlan_tpid);
 UINT GetIpHeaderSize(UCHAR *src, UINT src_size);
+bool ParseDnsQuery(char *name, UINT name_size, void *data, UINT data_size);
+UCHAR GetNextByte(BUF *b);
 
 bool IsDhcpPacketForSpecificMac(UCHAR *data, UINT size, UCHAR *mac_address);
 
-ICMP_RESULT *IcmpEchoSendBySocket(IP *dest_ip, UCHAR ttl, UCHAR *data, UINT size, UINT timeout);
-ICMP_RESULT *IcmpEchoSend(IP *dest_ip, UCHAR ttl, UCHAR *data, UINT size, UINT timeout);
 ICMP_RESULT *IcmpParseResult(IP *dest_ip, USHORT src_id, USHORT src_seqno, UCHAR *recv_buffer, UINT recv_buffer_size);
 void IcmpFreeResult(ICMP_RESULT *r);
 
@@ -896,6 +922,7 @@ void FreeDhcpOptions(LIST *o);
 LIST *ParseDhcpOptions(void *data, UINT size);
 BUF *BuildDhcpOptionsBuf(LIST *o);
 HTTPLOG *ParseHttpAccessLog(PKT *pkt);
+HTTPLOG *ParseHttpsAccessLog(PKT *pkt);
 
 BUF *DhcpModify(DHCP_MODIFY_OPTION *m, void *data, UINT size);
 BUF *DhcpModifyIPv4(DHCP_MODIFY_OPTION *m, void *data, UINT size);
@@ -919,7 +946,3 @@ bool NormalizeClasslessRouteTableStr(char *dst, UINT dst_size, char *src);
 #endif	// TCPIP_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/

@@ -1,17 +1,17 @@
-// SoftEther VPN Source Code
+// SoftEther VPN Source Code - Developer Edition Master Branch
 // Cedar Communication Module
 // 
 // SoftEther VPN Server, Client and Bridge are free software under GPLv2.
 // 
-// Copyright (c) 2012-2014 Daiyuu Nobori.
-// Copyright (c) 2012-2014 SoftEther VPN Project, University of Tsukuba, Japan.
-// Copyright (c) 2012-2014 SoftEther Corporation.
+// Copyright (c) Daiyuu Nobori.
+// Copyright (c) SoftEther VPN Project, University of Tsukuba, Japan.
+// Copyright (c) SoftEther Corporation.
 // 
 // All Rights Reserved.
 // 
 // http://www.softether.org/
 // 
-// Author: Daiyuu Nobori
+// Author: Daiyuu Nobori, Ph.D.
 // Comments: Tetsuo Sugiyama, Ph.D.
 // 
 // This program is free software; you can redistribute it and/or
@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -157,7 +172,7 @@ struct RPC_SERVER_STATUS
 	UINT NumTcpConnectionsLocal;		// Number of Local TCP connections
 	UINT NumTcpConnectionsRemote;		// Number of remote TCP connections
 	UINT NumHubTotal;					// Total number of HUBs
-	UINT NumHubStandalone;				// Nymber of stand-alone HUB
+	UINT NumHubStandalone;				// Number of stand-alone HUB
 	UINT NumHubStatic;					// Number of static HUBs
 	UINT NumHubDynamic;					// Number of Dynamic HUBs
 	UINT NumSessionsTotal;				// Total number of sessions
@@ -295,6 +310,7 @@ struct RPC_KEY_PAIR
 {
 	X *Cert;							// Certificate
 	K *Key;								// Secret key
+	UINT Flag1;							// Flag1
 };
 
 // HUB option
@@ -656,6 +672,9 @@ struct RPC_ENUM_SESSION_ITEM
 	bool Client_MonitorMode;						// Client is monitoring mode
 	UINT VLanId;									// VLAN ID
 	UCHAR UniqueId[16];								// Unique ID
+	bool IsDormantEnabled;							// Is the dormant state enabled
+	bool IsDormant;									// Is in the dormant state
+	UINT64 LastCommDormant;							// Last comm interval in the dormant state
 };
 
 // Disconnect the session
@@ -984,7 +1003,6 @@ struct RPC_AZURE_STATUS
 UINT AdminAccept(CONNECTION *c, PACK *p);
 void HashAdminPassword(void *hash, char *password);
 SESSION *AdminConnectMain(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err, char *client_name, void *hWnd, bool *empty_password);
-RPC *AdminConnect(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err);
 RPC *AdminConnectEx(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err, char *client_name);
 RPC *AdminConnectEx2(CEDAR *cedar, CLIENT_OPTION *o, char *hubname, void *hashed_password, UINT *err, char *client_name, void *hWnd);
 void AdminDisconnect(RPC *rpc);
@@ -1337,7 +1355,7 @@ void InRpcDeleteHub(RPC_DELETE_HUB *t, PACK *p);
 void OutRpcDeleteHub(PACK *p, RPC_DELETE_HUB *t);
 void InRpcEnumConnection(RPC_ENUM_CONNECTION *t, PACK *p);
 void OutRpcEnumConnection(PACK *p, RPC_ENUM_CONNECTION *t);
-void FreeRpcEnumConnetion(RPC_ENUM_CONNECTION *t);
+void FreeRpcEnumConnection(RPC_ENUM_CONNECTION *t);
 void InRpcDisconnectConnection(RPC_DISCONNECT_CONNECTION *t, PACK *p);
 void OutRpcDisconnectConnection(PACK *p, RPC_DISCONNECT_CONNECTION *t);
 void InRpcConnectionInfo(RPC_CONNECTION_INFO *t, PACK *p);
@@ -1514,7 +1532,3 @@ void OutRpcInternetSetting(PACK *p, INTERNET_SETTING *t);
 #endif	// ADMIN_H
 
 
-
-// Developed by SoftEther VPN Project at University of Tsukuba in Japan.
-// Department of Computer Science has dozens of overly-enthusiastic geeks.
-// Join us: http://www.tsukuba.ac.jp/english/admission/
